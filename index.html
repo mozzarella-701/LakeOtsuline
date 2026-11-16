@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WETER（非公式）大津線リアルタイム時刻表</title>
+<style>
+:root{--bg:#fff;--fg:#1c2330;--sub:#667085;--line:#e3e7ee;--acc:#0b6bcb;--late:#c2410c;--card:#f6f8fb}
+@media(prefers-color-scheme:dark){:root{--bg:#10151d;--fg:#e8ecf3;--sub:#9aa6b8;--line:#263041;--acc:#6db3ff;--late:#fb923c;--card:#171e29}}
+body{margin:0;font:15px/1.5 system-ui,"Hiragino Sans","Noto Sans JP",sans-serif;background:var(--bg);color:var(--fg)}
+main{max-width:640px;margin:0 auto;padding:12px 14px 40px}
+h1{font-size:18px;margin:6px 0 2px}
+.s{color:var(--sub);font-size:12px}
+.warn{background:var(--card);border-left:3px solid var(--late);padding:6px 10px;font-size:12px;margin:8px 0}
+nav{display:flex;gap:6px;margin:10px 0}
+nav button{flex:1;padding:8px;border:1px solid var(--line);background:var(--card);color:var(--fg);border-radius:8px;font:inherit}
+nav button.on{border-color:var(--acc);color:var(--acc);font-weight:600}
+select,input{font:inherit;padding:6px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg)}
+h2{font-size:14px;margin:16px 0 6px;color:var(--sub)}
+.row{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:8px 10px;border:1px solid var(--line);border-radius:8px;margin:6px 0;background:var(--card)}
+.t{font-weight:700;font-size:17px;font-variant-numeric:tabular-nums}
+.late{color:var(--late)}
+.bar{height:4px;background:var(--line);border-radius:2px;margin-top:4px}.bar i{display:block;height:4px;background:var(--acc);border-radius:2px}
+</style></head><body><main>
+<h1>WETER <span class="s">非公式・大津線</span></h1>
+<p class="s">京阪電車の公式サービスではありません。時刻表をもとにした推定で、実際の運行とは異なる場合があります。</p>
+<div class="warn">いまは<b>土休日ダイヤのみ</b>です（平日は実際と異なります）。遅れの入力は、この画面の中だけで反映され、他の人には共有されません。</div>
+<label class="s">時刻を指定（空欄＝現在） <input id="tm" type="time"></label>
+<nav><button id="b1" class="on">駅の時刻表</button><button id="b2">走行中の列車</button></nav>
+<div id="p1"><select id="st" aria-label="駅"></select><div id="o1"></div></div>
+<div id="p2" hidden><div id="o2"></div></div>
+</main>
+<script>
+let D, R = {};
+const $ = s => document.querySelector(s);
+const fmt = m => { m = Math.round(m); return Math.floor(m / 60) + ':' + String(m % 60).padStart(2, '0'); };
+const DIR = { to_ishiyama: '石山寺方面', to_sakamoto: '坂本比叡山口方面', up: '太秦天神川方面', down: 'びわ湖浜大津方面' };
+// 現在時刻（分）。深夜0〜4時は24時台の続きとして扱う
+function now() {
+  const v = $('#tm').value; let h, m, s = 0;
+  if (v) [h, m] = v.split(':').map(Number); else { const d = new Date(); h = d.getHours(); m = d.getMinutes(); s = d.getSeconds(); }
+  let t = h * 60 + m + s / 60; if (h < 4) t += 1440; return t;
+}
+// 投稿された遅れ(分)は、その停車駅以降すべてに引き継ぐ
+const dl = (tr, k) => { const r = R[tr[0]]; return r && k >= r.k ? r.min : 0; };
+function locate(tr, t) {
+  const T = tr[6], n = T.length;
+  if (t < T[0] || t >= T[n - 1] + dl(tr, n - 1)) return null;
+  if (t < T[0] + dl(tr, 0)) return { k: 0, w: 1 };
+  for (let k = 0; k < n - 1; k++) {
+    const a = T[k] + dl(tr, k), b = T[k + 1] + dl(tr, k + 1);
+    if (a <= t && t < b) return { k, f: (t - a) / (b - a || 1), eta: b };
+  }
+  return null;
+}
+function board() {
+  const t = now(), si = +$('#st').value, g = {};
+  for (const tr of D.trips) {
+    const S = tr[5], T = tr[6];
+    for (let k = 0; k < S.length - 1; k++) if (S[k] === si) {
+      const e = T[k] + dl(tr, k);
+      if (e >= t - 0.5) (g[tr[1] + '_' + tr[2]] ??= []).push([e, T[k], tr]);
+    }
+  }
+  let h = '<p class="s">' + fmt(t) + ' 現在</p>';
+  for (const key of Object.keys(g).sort()) {
+    const [li, di] = key.split('_').map(Number);
+    h += `<h2>${D.lines[li][1]} ${DIR[D.dirs[di]]}</h2>`;
+    for (const [e, s, tr] of g[key].sort((a, b) => a[0] - b[0]).slice(0, 3)) {
+      const d = Math.round(e - s);
+      h += `<div class="row"><div><span class="t">${fmt(e)}</span> 発　${D.heads[tr[3]]}行<div class="s">時刻表 ${fmt(s)}${d ? ` <span class="late">遅れ+${d}分</span>` : ''}${tr[4] >= 0 ? '　' + D.notes[tr[4]] : ''}</div></div></div>`;
+    }
+  }
+  $('#o1').innerHTML = Object.keys(g).length ? h : h + '<p class="s">これから出る列車はありません（終点、または運行終了）。</p>';
+}
+function trains() {
+  const t = now(), g = {};
+  for (const tr of D.trips) { const p = locate(tr, t); if (p) (g[tr[1] + '_' + tr[2]] ??= []).push([tr, p]); }
+  let h = '';
+  for (const key of Object.keys(g).sort()) {
+    const [li, di] = key.split('_').map(Number);
+    h += `<h2>${D.lines[li][1]} ${DIR[D.dirs[di]]}（${g[key].length}本）</h2>`;
+    for (const [tr, p] of g[key].sort((a, b) => (a[1].k + (a[1].f || 0)) - (b[1].k + (b[1].f || 0)))) {
+      const sn = i => D.stations[tr[5][i]][1], d = dl(tr, p.k);
+      const pos = p.w ? `${sn(0)} で発車待ち` : `${sn(p.k)} → ${sn(p.k + 1)}　${sn(p.k + 1)}着 ${fmt(p.eta)}`;
+      h += `<div class="row"><div style="flex:1"><b>${D.heads[tr[3]]}行</b> <span class="s">#${tr[0]}</span>
+<div class="s">${pos}${d ? ` <span class="late">遅れ+${d}分</span>` : ''}</div>${p.w ? '' : `<div class="bar"><i style="width:${Math.round(p.f * 100)}%"></i></div>`}</div>
+<select data-id="${tr[0]}" data-k="${p.k}" aria-label="遅れを入力"><option value="0">遅れなし</option>${[1, 2, 3, 5, 10, 15].map(x => `<option value="${x}"${d === x ? ' selected' : ''}>+${x}分</option>`).join('')}</select></div>`;
+    }
+  }
+  $('#o2').innerHTML = h || '<p class="s">この時刻に走っている列車はありません。</p>';
+}
+const render = () => { if (!D) return; board(); trains(); };
+function show(n) {
+  $('#p1').hidden = n !== 1; $('#p2').hidden = n !== 2;
+  $('#b1').classList.toggle('on', n === 1); $('#b2').classList.toggle('on', n === 2);
+}
+fetch('timetable.json').then(r => r.json()).then(j => {
+  D = j; const seen = new Set(); let h = '';
+  for (const L of D.lines) {
+    h += `<optgroup label="${L[1]}">`;
+    for (const i of L[2]) if (!seen.has(i)) { seen.add(i); h += `<option value="${i}">${D.stations[i][1]}</option>`; }
+    h += '</optgroup>';
+  }
+  $('#st').innerHTML = h; render(); setInterval(render, 15000);
+}).catch(() => { $('#o1').textContent = 'timetable.json を読み込めません。サーバー経由（GitHub Pages など）で開いてください。'; });
+$('#st').onchange = $('#tm').oninput = render;
+$('#b1').onclick = () => show(1); $('#b2').onclick = () => show(2);
+$('#o2').onchange = e => {
+  const s = e.target; if (!s.dataset.id) return;
+  const m = +s.value; if (m) R[s.dataset.id] = { k: +s.dataset.k, min: m }; else delete R[s.dataset.id];
+  render();
+};
+</script></body></html>
