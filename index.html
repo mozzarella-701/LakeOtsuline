@@ -18,6 +18,13 @@ h2{font-size:14px;margin:16px 0 6px;color:var(--sub)}
 .t{font-weight:700;font-size:17px;font-variant-numeric:tabular-nums}
 .late{color:var(--late)}
 .bar{height:4px;background:var(--line);border-radius:2px;margin-top:4px}.bar i{display:block;height:4px;background:var(--acc);border-radius:2px}
+.tap{cursor:pointer}
+#sh{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:flex-end;justify-content:center;z-index:9}
+#sh.on{display:flex}
+#sh>div{background:var(--bg);width:100%;max-width:640px;max-height:85vh;overflow:auto;border-radius:14px 14px 0 0;padding:12px 14px 24px}
+.st{display:flex;justify-content:space-between;padding:7px 4px;border-bottom:1px solid var(--line)}
+.st.past{color:var(--sub)}.st.now{background:var(--card);font-weight:700}
+.dg svg{display:block;width:100%;max-width:420px;margin:0 auto}
 </style></head><body><main>
 <h1>WETER <span class="s">非公式・大津線</span></h1>
 <p class="s">京阪電車の公式サービスではありません。時刻表をもとにした推定で、実際の運行とは異なる場合があります。</p>
@@ -27,8 +34,9 @@ h2{font-size:14px;margin:16px 0 6px;color:var(--sub)}
 <div id="p1"><select id="st" aria-label="駅"></select><div id="o1"></div></div>
 <div id="p2" hidden><div id="o2"></div></div>
 </main>
+<div id="sh"><div id="shb"></div></div>
 <script>
-let D, R = {};
+let D, R = {}, HAMA = -1;
 const $ = s => document.querySelector(s);
 const fmt = m => { m = Math.round(m); return Math.floor(m / 60) + ':' + String(m % 60).padStart(2, '0'); };
 const DIR = { to_ishiyama: '石山寺方面', to_sakamoto: '坂本比叡山口方面', up: '太秦天神川方面', down: 'びわ湖浜大津方面' };
@@ -65,27 +73,57 @@ function board() {
     h += `<h2>${D.lines[li][1]} ${DIR[D.dirs[di]]}</h2>`;
     for (const [e, s, tr] of g[key].sort((a, b) => a[0] - b[0]).slice(0, 3)) {
       const d = Math.round(e - s);
-      h += `<div class="row"><div><span class="t">${fmt(e)}</span> 発　${D.heads[tr[3]]}行<div class="s">時刻表 ${fmt(s)}${d ? ` <span class="late">遅れ+${d}分</span>` : ''}${tr[4] >= 0 ? '　' + D.notes[tr[4]] : ''}</div></div></div>`;
+      const ahead = tr[4] >= 0 && tr[5].indexOf(HAMA) >= tr[5].indexOf(si);
+      h += `<div class="row tap" data-tr="${tr[0]}"><div><span class="t">${fmt(e)}</span> 発　${D.heads[tr[3]]}行<div class="s">時刻表 ${fmt(s)}${d ? ` <span class="late">遅れ+${d}分</span>` : ''}${ahead ? '　' + D.notes[tr[4]] : ''}</div></div><span class="s">›</span></div>`;
     }
   }
   $('#o1').innerHTML = Object.keys(g).length ? h : h + '<p class="s">これから出る列車はありません（終点、または運行終了）。</p>';
 }
+const GAP = 46, TOP = 26, BX = 170, UP = ['to_ishiyama', 'up'];
 function trains() {
-  const t = now(), g = {};
-  for (const tr of D.trips) { const p = locate(tr, t); if (p) (g[tr[1] + '_' + tr[2]] ??= []).push([tr, p]); }
-  let h = '';
-  for (const key of Object.keys(g).sort()) {
-    const [li, di] = key.split('_').map(Number);
-    h += `<h2>${D.lines[li][1]} ${DIR[D.dirs[di]]}（${g[key].length}本）</h2>`;
-    for (const [tr, p] of g[key].sort((a, b) => (a[1].k + (a[1].f || 0)) - (b[1].k + (b[1].f || 0)))) {
-      const sn = i => D.stations[tr[5][i]][1], d = dl(tr, p.k);
-      const pos = p.w ? `${sn(0)} で発車待ち` : `${sn(p.k)} → ${sn(p.k + 1)}　${sn(p.k + 1)}着 ${fmt(p.eta)}`;
-      h += `<div class="row"><div style="flex:1"><b>${D.heads[tr[3]]}行</b> <span class="s">#${tr[0]}</span>
-<div class="s">${pos}${d ? ` <span class="late">遅れ+${d}分</span>` : ''}</div>${p.w ? '' : `<div class="bar"><i style="width:${Math.round(p.f * 100)}%"></i></div>`}</div>
-<select data-id="${tr[0]}" data-k="${p.k}" aria-label="遅れを入力"><option value="0">遅れなし</option>${[1, 2, 3, 5, 10, 15].map(x => `<option value="${x}"${d === x ? ' selected' : ''}>+${x}分</option>`).join('')}</select></div>`;
+  const t = now(); let h = '';
+  D.lines.forEach((L, li) => {
+    const pos = {}; L[2].forEach((x, i) => pos[x] = i);
+    const H = TOP * 2 + GAP * (L[2].length - 1), items = [];
+    for (const tr of D.trips) {
+      if (tr[1] !== li) continue;
+      const p = locate(tr, t); if (!p) continue;
+      const a = pos[tr[5][p.k]], b = p.w ? a : pos[tr[5][p.k + 1]];
+      items.push({ tr, p, up: UP.includes(D.dirs[tr[2]]), y: TOP + (a + (b - a) * (p.f || 0)) * GAP });
     }
-  }
-  $('#o2').innerHTML = h || '<p class="s">この時刻に走っている列車はありません。</p>';
+    items.sort((u, v) => u.y - v.y);
+    const cols = [[], []];
+    for (const it of items) {
+      const sd = it.up ? 0 : 1, c = cols[sd]; let k = 0;
+      while (c[k] !== undefined && it.y - c[k] < 52) k++;
+      c[k] = it.y; it.x = BX + (sd ? 34 + k * 36 : -34 - k * 36);
+    }
+    let g = `<svg viewBox="0 0 360 ${H}" role="img" aria-label="${L[1]}の列車位置"><line x1="${BX}" y1="${TOP}" x2="${BX}" y2="${H - TOP}" stroke="#2f6fb5" stroke-width="12" stroke-linecap="round"/>`;
+    L[2].forEach((si, i) => {
+      const y = TOP + i * GAP;
+      g += `<circle cx="${BX}" cy="${y}" r="9" fill="#fff" stroke="#2f6fb5" stroke-width="4"/><text x="6" y="${y + 5}" font-size="13" fill="currentColor">${D.stations[si][1]}</text>`;
+    });
+    for (const it of items) {
+      const { x, y, up, tr } = it, d = dl(tr, it.p.k);
+      g += `<g data-tr="${tr[0]}" style="cursor:pointer"><rect x="${x - 14}" y="${y - 17}" width="28" height="34" rx="9" fill="#2f6fb5"/><rect x="${x - 8}" y="${y - 11}" width="16" height="9" rx="2" fill="#fff" opacity=".85"/><path d="${up ? `M${x - 6} ${y - 24}h12l-6 -9z` : `M${x - 6} ${y + 24}h12l-6 9z`}" fill="#f0902f"/>${d ? `<text x="${x}" y="${up ? y + 34 : y - 22}" text-anchor="middle" font-size="14" font-weight="700" fill="#f0902f">+${d}</text>` : ''}</g>`;
+    }
+    const n0 = D.stations[L[2][0]][1], n1 = D.stations[L[2][L[2].length - 1]][1];
+    h += `<h2>${L[1]}（走行中 ${items.length}本）</h2><p class="s">▲ ${n0}方面（左）　▼ ${n1}方面（右）　列車をタップすると全駅の時刻が出ます</p><div class="dg">${g}</svg></div>`;
+  });
+  $('#o2').innerHTML = h;
+}
+function sheet(id) {
+  const tr = D.trips.find(x => x[0] === id), t = now(), p = locate(tr, t), S = tr[5], T = tr[6], n = S.length;
+  const cur = p ? p.k : -1, done = !p && t >= T[n - 1], nm = k => D.stations[S[k]][1];
+  const d0 = p ? dl(tr, p.k) : 0;
+  let h = `<span id="x" style="float:right;padding:0 6px;font-size:22px;cursor:pointer">✕</span><b>${D.lines[tr[1]][1]}　${D.heads[tr[3]]}行</b> <span class="s">#${tr[0]}　${DIR[D.dirs[tr[2]]]}</span>`;
+  h += `<div class="s">${p ? (p.w ? nm(0) + ' で発車待ち' : nm(p.k) + ' → ' + nm(p.k + 1) + ' を走行中') : (done ? '運行を終えました' : 'まだ出発していません')}${tr[4] >= 0 ? '<br>' + D.notes[tr[4]] : ''}</div>`;
+  h += `<p class="s">この列車の遅れ（この画面のみ）： <select id="dsel" data-id="${tr[0]}" data-k="${Math.max(cur, 0)}"><option value="0">遅れなし</option>${[1, 2, 3, 5, 10, 15, 20].map(x => `<option value="${x}"${d0 === x ? ' selected' : ''}>+${x}分</option>`).join('')}</select></p>`;
+  S.forEach((si, k) => {
+    const d = dl(tr, k), e = T[k] + d;
+    h += `<div class="st${done || k < cur ? ' past' : ''}${k === cur ? ' now' : ''}"><span>${nm(k)}${k === n - 1 ? '（終点・到着は推定）' : ''}</span><span>${fmt(e)}${d ? ` <span class="late">+${d}</span>` : ''}</span></div>`;
+  });
+  $('#shb').innerHTML = h; $('#sh').classList.add('on');
 }
 const render = () => { if (!D) return; board(); trains(); };
 function show(n) {
@@ -93,7 +131,7 @@ function show(n) {
   $('#b1').classList.toggle('on', n === 1); $('#b2').classList.toggle('on', n === 2);
 }
 fetch('timetable.json').then(r => r.json()).then(j => {
-  D = j; const seen = new Set(); let h = '';
+  D = j; HAMA = D.stations.findIndex(x => x[0] === 'biwako-hamaotsu'); const seen = new Set(); let h = '';
   for (const L of D.lines) {
     h += `<optgroup label="${L[1]}">`;
     for (const i of L[2]) if (!seen.has(i)) { seen.add(i); h += `<option value="${i}">${D.stations[i][1]}</option>`; }
@@ -103,9 +141,12 @@ fetch('timetable.json').then(r => r.json()).then(j => {
 }).catch(() => { $('#o1').textContent = 'timetable.json を読み込めません。サーバー経由（GitHub Pages など）で開いてください。'; });
 $('#st').onchange = $('#tm').oninput = render;
 $('#b1').onclick = () => show(1); $('#b2').onclick = () => show(2);
-$('#o2').onchange = e => {
-  const s = e.target; if (!s.dataset.id) return;
-  const m = +s.value; if (m) R[s.dataset.id] = { k: +s.dataset.k, min: m }; else delete R[s.dataset.id];
-  render();
+const tap = e => { const el = e.target.closest('[data-tr]'); if (el) sheet(+el.dataset.tr); };
+$('#o1').onclick = $('#o2').onclick = tap;
+$('#sh').onclick = e => { if (e.target.id === 'sh' || e.target.id === 'x') $('#sh').classList.remove('on'); };
+$('#shb').onchange = e => {
+  const x = e.target; if (!x.dataset.id) return;
+  const m = +x.value; if (m) R[x.dataset.id] = { k: +x.dataset.k, min: m }; else delete R[x.dataset.id];
+  render(); sheet(+x.dataset.id);
 };
 </script></body></html>
