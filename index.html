@@ -24,6 +24,7 @@ main{padding-bottom:84px}
 .tm{min-width:58px}.tm s{display:block;color:var(--sub);font-size:12px}.tm b{font-size:19px;font-variant-numeric:tabular-nums}
 .wide{width:100%;margin-top:8px;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg);font:inherit}
 .gr{display:flex;flex-wrap:wrap;gap:6px}.gr span{padding:5px 9px;border:1px solid var(--line);border-radius:6px;background:var(--card);font-variant-numeric:tabular-nums;cursor:pointer}
+#fr,#to{max-width:42%}
 .tb{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--bg);border-top:1px solid var(--line);z-index:5}
 .tb button{flex:1;padding:10px 0 16px;border:0;background:none;color:var(--sub);font:inherit}.tb button.on{color:var(--acc);font-weight:700}
 select,input{font:inherit;padding:6px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg)}
@@ -51,8 +52,11 @@ h2{font-size:14px;margin:16px 0 6px;color:var(--sub)}
 <div id="chips"></div><div id="o1"></div>
 </div>
 <div id="p2" hidden><div id="o2"></div></div>
+<div id="p3" hidden><h2>乗換案内（大津線の中）</h2><p class="s">時刻は、上の「時刻を指定」（空欄＝現在）を使います。</p>
+<div class="my"><select id="fr" aria-label="出発駅"></select><span class="lnk" id="sw">⇄</span><select id="to" aria-label="到着駅"></select></div>
+<button class="wide" id="go">検索</button><div id="o3"></div></div>
 </main>
-<nav class="tb"><button id="b1" class="on">ホーム</button><button id="b2">列車走行位置</button></nav>
+<nav class="tb"><button id="b1" class="on">ホーム</button><button id="b3">乗換案内</button><button id="b2">列車走行位置</button></nav>
 <div id="sh"><div id="shb"></div></div>
 <script>
 let D, R = {}, TR = [], HAMA = -1, useDelay = true, MY = [], cur = -1, more = false;
@@ -198,10 +202,50 @@ function setDay() {
   TR = D.trips.filter(t => t[7] === di);
   $('#dayinfo').innerHTML = `いまは<b>${D.days[di][1]}ダイヤ</b>で表示しています${v ? '（手動で選択）' : '（日付から自動で判定。祝日・年末年始は土休日扱い）'}。臨時ダイヤの日は実際と異なります。遅れの入力は、この画面の中だけで反映され、他の人には共有されません。`;
 }
+// 乗換案内: 全列車の「駅→次の駅」を時刻順に走査して、最も早く着く経路を求める
+const XFER = { default: 1, 'biwako-hamaotsu': 1 };   // 乗換に必要な分。浜大津は1分（指定）。他の駅は調査後に更新する
+const xf = s => XFER[D.stations[s][0]] ?? XFER.default;
+function route(a, b, t0) {
+  const C = [];
+  for (const tr of TR) { const S = tr[5], T = tr[6]; for (let k = 0; k < S.length - 1; k++) C.push({ tr, f: S[k], t: S[k + 1], d: T[k] + dlb(tr, k), a: T[k + 1] + dlb(tr, k + 1) }); }
+  C.sort((x, y) => x.d - y.d);
+  const arr = { [a]: t0 }, pred = {}, on = {}, bd = {};
+  for (const c of C) {
+    const id = c.tr[0];
+    if (!on[id]) {
+      if (arr[c.f] === undefined || c.d < arr[c.f] + (c.f === a && !pred[c.f] ? 0 : xf(c.f))) continue;
+      on[id] = true; bd[id] = { c, prev: pred[c.f] || null };
+    }
+    if (c.a < (arr[c.t] ?? 1e9)) { arr[c.t] = c.a; pred[c.t] = c; }
+  }
+  if (arr[b] === undefined || !pred[b]) return null;
+  const legs = []; let c = pred[b];
+  while (c) { const o = bd[c.tr[0]]; legs.unshift({ tr: c.tr, from: o.c.f, dep: o.c.d, to: c.t, arr: c.a }); c = o.prev; }
+  return legs;
+}
+function routeCard(L) {
+  const dep = L[0].dep, arr = L[L.length - 1].arr, nm = i => D.stations[i][1];
+  let h = `<div class="card"><div class="ch"><b class="t">${fmt(dep)} → ${fmt(arr)}</b><span class="s">${Math.round(arr - dep)}分 ／ 乗換 ${L.length - 1}回</span></div>`;
+  L.forEach((g, i) => {
+    h += (i ? `<p class="s" style="margin:4px 0 4px 12px">↳ ${nm(g.from)}で乗換（${xf(g.from)}分以上）</p>` : '') +
+      `<div class="rw" data-tr="${g.tr[0]}"><div class="tm"><b>${fmt(g.dep)}</b></div><div style="flex:1">${nm(g.from)} → ${nm(g.to)}<div class="s">${D.lines[g.tr[1]][1]}　${D.heads[g.tr[3]]}行　${fmt(g.arr)}着</div></div><span class="s">›</span></div>`;
+  });
+  return h + '</div>';
+}
+function search() {
+  const a = +$('#fr').value, b = +$('#to').value;
+  if (a === b) { $('#o3').innerHTML = '<p class="s">出発と到着が同じ駅です。</p>'; return; }
+  let t = now(), h = ''; const seen = new Set();
+  for (let i = 0; i < 3; i++) {
+    const L = route(a, b, t); if (!L) break;
+    const key = L[0].dep + '_' + L[L.length - 1].arr; if (seen.has(key)) break;
+    seen.add(key); h += routeCard(L); t = L[0].dep + 0.5;
+  }
+  $('#o3').innerHTML = h || '<p class="s">この時刻以降に、大津線の中で行ける経路がありません。</p>';
+}
 const render = () => { if (!D) return; setDay(); board(); trains(); };
 function show(n) {
-  $('#p1').hidden = n !== 1; $('#p2').hidden = n !== 2;
-  $('#b1').classList.toggle('on', n === 1); $('#b2').classList.toggle('on', n === 2);
+  for (const i of [1, 2, 3]) { $('#p' + i).hidden = i !== n; $('#b' + i).classList.toggle('on', i === n); }
 }
 fetch('timetable.json').then(r => r.json()).then(j => {
   D = j; HAMA = D.stations.findIndex(x => x[0] === 'biwako-hamaotsu'); const seen = new Set(); let h = '';
@@ -210,12 +254,13 @@ fetch('timetable.json').then(r => r.json()).then(j => {
     for (const i of L[2]) if (!seen.has(i)) { seen.add(i); h += `<option value="${i}">${D.stations[i][1]}</option>`; }
     h += '</optgroup>';
   }
-  $('#st').innerHTML = '<option value="" selected disabled>駅を選ぶ…</option>' + h; loadMy(); render(); setInterval(render, 15000);
+  $('#st').innerHTML = '<option value="" selected disabled>駅を選ぶ…</option>' + h; $('#fr').innerHTML = h; $('#to').innerHTML = h; $('#to').selectedIndex = $('#to').options.length - 1; loadMy(); render(); setInterval(render, 15000);
 }).catch(() => { $('#o1').textContent = 'timetable.json を読み込めません。サーバー経由（GitHub Pages など）で開いてください。'; });
 $('#tm').oninput = $('#dy').onchange = render; $('#rf').onclick = render;
-$('#b1').onclick = () => show(1); $('#b2').onclick = () => show(2);
+$('#b1').onclick = () => show(1); $('#b2').onclick = () => show(2); $('#b3').onclick = () => show(3);
+$('#go').onclick = search; $('#sw').onclick = () => { const x = $('#fr').value; $('#fr').value = $('#to').value; $('#to').value = x; };
 const tap = e => { const el = e.target.closest('[data-tr]'); if (el) sheet(+el.dataset.tr); };
-$('#o2').onclick = tap;
+$('#o2').onclick = $('#o3').onclick = tap;
 $('#shb').addEventListener('click', e => { const el = e.target.closest('[data-tr]'); if (el) sheet(+el.dataset.tr); });
 $('#p1').onclick = e => {
   const t = e.target, c = t.closest('[data-si]'), tr = t.closest('[data-tr]');
