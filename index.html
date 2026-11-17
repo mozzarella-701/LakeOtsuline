@@ -25,6 +25,15 @@ main{padding-bottom:84px}
 .wide{width:100%;margin-top:8px;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg);font:inherit}
 .gr{display:flex;flex-wrap:wrap;gap:6px}.gr span{padding:5px 9px;border:1px solid var(--line);border-radius:6px;background:var(--card);font-variant-numeric:tabular-nums;cursor:pointer}
 #fr,#to{max-width:42%}
+.go{width:100%;margin-top:10px;padding:12px;border:0;border-radius:24px;background:#0b72b9;color:#fff;font:inherit;font-weight:700}
+.rh{display:flex;align-items:center;gap:8px;padding:6px 0}
+.tabs{display:flex;border-bottom:2px solid var(--line);margin:8px 0}
+.tbn{flex:1;text-align:center;padding:9px 0;color:var(--sub);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px}
+.tbn.on{color:var(--acc);border-color:var(--acc);font-weight:700}.tbn.dis{opacity:.4;cursor:default}
+.rtb{background:var(--card);text-align:center;color:var(--sub);padding:7px;font-size:13px;cursor:pointer;border-radius:6px;margin:6px 0}
+.rc{background:var(--bg);border-radius:12px;padding:14px;margin:10px 0;border:1px solid var(--line);cursor:pointer}
+.rc .tt{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums}.rc .mt{color:var(--sub);margin-top:4px}
+.rc .lg{display:inline-block;margin:8px 6px 0 0;padding:2px 8px;border-radius:6px;color:#fff;font-size:12px}
 .tb{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--bg);border-top:1px solid var(--line);z-index:5}
 .tb button{flex:1;padding:10px 0 16px;border:0;background:none;color:var(--sub);font:inherit}.tb button.on{color:var(--acc);font-weight:700}
 select,input{font:inherit;padding:6px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--fg)}
@@ -52,9 +61,15 @@ h2{font-size:14px;margin:16px 0 6px;color:var(--sub)}
 <div id="chips"></div><div id="o1"></div>
 </div>
 <div id="p2" hidden><div id="o2"></div></div>
-<div id="p3" hidden><h2>乗換案内（大津線の中）</h2><p class="s">時刻は、上の「時刻を指定」（空欄＝現在）を使います。</p>
+<div id="p3" hidden>
+<div id="f3"><h2>経路検索</h2><div class="card">
 <div class="my"><select id="fr" aria-label="出発駅"></select><span class="lnk" id="sw">⇄</span><select id="to" aria-label="到着駅"></select></div>
-<button class="wide" id="go">検索</button><div id="o3"></div></div>
+<div class="s" id="tmv" style="margin:6px 2px"></div><div class="s" style="margin:0 2px">時刻の変更は、上の「時刻を指定」から。大津線の中の案内です。</div>
+<button class="go" id="go">検索</button>
+<div class="my" style="margin-top:14px"><b>マイ区間</b><span class="lnk" id="svr">＋ この区間を保存</span></div><div id="myr"></div></div></div>
+<div id="r3" hidden><div class="rh"><span class="lnk" id="bk">‹ 戻る</span><div style="text-align:center;flex:1"><b id="rt1"></b><div class="s" id="rt2"></div></div><span style="width:44px"></span></div>
+<div class="tabs"><span class="tbn on" data-o="a">早い順</span><span class="tbn dis">安い順</span><span class="tbn" data-o="t">乗換順(少)</span></div>
+<div class="rtb" id="rtb"></div><div id="o3"></div></div></div>
 </main>
 <nav class="tb"><button id="b1" class="on">ホーム</button><button id="b3">乗換案内</button><button id="b2">列車走行位置</button></nav>
 <div id="sh"><div id="shb"></div></div>
@@ -205,9 +220,13 @@ function setDay() {
 // 乗換案内: 全列車の「駅→次の駅」を時刻順に走査して、最も早く着く経路を求める
 const XFER = { default: 1, 'biwako-hamaotsu': 1 };   // 乗換に必要な分。浜大津は1分（指定）。他の駅は調査後に更新する
 const xf = s => XFER[D.stations[s][0]] ?? XFER.default;
+const DWELL = { 'biwako-hamaotsu': 1 };   // 停車時間（分）。時刻表には発車時刻しかないので、到着は発車の何分前とみなすか。浜大津は本家の結果と合わせた値
+const dw = s => DWELL[D.stations[s][0]] ?? 0;
+const LC = ['#d9822b', '#2f8f5b'];         // 路線の印の色（京津線、石山坂本線）
+let RES = [], ord = 'a', AB = [0, 0], MR = [];
 function route(a, b, t0) {
   const C = [];
-  for (const tr of TR) { const S = tr[5], T = tr[6]; for (let k = 0; k < S.length - 1; k++) C.push({ tr, f: S[k], t: S[k + 1], d: T[k] + dlb(tr, k), a: T[k + 1] + dlb(tr, k + 1) }); }
+  for (const tr of TR) { const S = tr[5], T = tr[6]; for (let k = 0; k < S.length - 1; k++) C.push({ tr, f: S[k], t: S[k + 1], d: T[k] + dlb(tr, k), a: T[k + 1] + dlb(tr, k + 1) - (k + 1 < S.length - 1 ? dw(S[k + 1]) : 0) }); }
   C.sort((x, y) => x.d - y.d);
   const arr = { [a]: t0 }, pred = {}, on = {}, bd = {};
   for (const c of C) {
@@ -223,27 +242,43 @@ function route(a, b, t0) {
   while (c) { const o = bd[c.tr[0]]; legs.unshift({ tr: c.tr, from: o.c.f, dep: o.c.d, to: c.t, arr: c.a }); c = o.prev; }
   return legs;
 }
-function routeCard(L) {
-  const dep = L[0].dep, arr = L[L.length - 1].arr, nm = i => D.stations[i][1];
-  let h = `<div class="card"><div class="ch"><b class="t">${fmt(dep)} → ${fmt(arr)}</b><span class="s">${Math.round(arr - dep)}分 ／ 乗換 ${L.length - 1}回</span></div>`;
-  L.forEach((g, i) => {
-    h += (i ? `<p class="s" style="margin:4px 0 4px 12px">↳ ${nm(g.from)}で乗換（${xf(g.from)}分以上）</p>` : '') +
+const arrOf = L => L[L.length - 1].arr;
+function search() {
+  const a = +$('#fr').value, b = +$('#to').value; AB = [a, b]; RES = [];
+  if (a !== b) {
+    let t = now(); const seen = new Set();
+    for (let i = 0; i < 6; i++) {
+      const L = route(a, b, t); if (!L) break;
+      const key = L[0].dep + '_' + arrOf(L); if (seen.has(key)) break;
+      seen.add(key); RES.push(L); t = L[0].dep + 0.5;
+    }
+  }
+  $('#f3').hidden = true; $('#r3').hidden = false; showRes();
+}
+function showRes() {
+  const nm = i => D.stations[i][1], n = new Date(); if (n.getHours() < 4) n.setDate(n.getDate() - 1);
+  $('#rt1').textContent = nm(AB[0]) + ' → ' + nm(AB[1]);
+  $('#rt2').textContent = `${n.getMonth() + 1}月${n.getDate()}日(${'日月火水木金土'[n.getDay()]}) ${fmt(now())} 出発`;
+  $('#rtb').textContent = 'リアルタイム経路検索 ' + (useDelay ? 'ON' : 'OFF');
+  document.querySelectorAll('.tbn[data-o]').forEach(e => e.classList.toggle('on', e.dataset.o === ord));
+  const R2 = RES.map((L, i) => [L, i]).sort((x, y) => (ord === 't' ? x[0].length - y[0].length : 0) || arrOf(x[0]) - arrOf(y[0]) || x[0][0].dep - y[0][0].dep);
+  $('#o3').innerHTML = R2.map(([L, i]) => `<div class="rc" data-ri="${i}"><div class="tt">${fmt(L[0].dep)} - ${fmt(arrOf(L))}</div><div class="mt">⏱ ${Math.round(arrOf(L) - L[0].dep)}分　⇄ 乗換 ${L.length - 1}回</div>${L.map(g => `<span class="lg" style="background:${LC[g.tr[1]]}">🚃 ${D.lines[g.tr[1]][1]}</span>`).join('')}</div>`).join('') || '<p class="s">この時刻以降に、大津線の中で行ける経路がありません。</p>';
+}
+function routeSheet(i) {
+  const L = RES[i], nm = x => D.stations[x][1];
+  let h = `<span id="x" style="float:right;padding:0 6px;font-size:22px;cursor:pointer">✕</span><b>${fmt(L[0].dep)} - ${fmt(arrOf(L))}</b> <span class="s">${Math.round(arrOf(L) - L[0].dep)}分 ／ 乗換 ${L.length - 1}回</span>`;
+  L.forEach((g, k) => {
+    h += (k ? `<p class="s" style="margin:4px 0 4px 12px">↳ ${nm(g.from)}で乗換（${xf(g.from)}分以上）</p>` : '') +
       `<div class="rw" data-tr="${g.tr[0]}"><div class="tm"><b>${fmt(g.dep)}</b></div><div style="flex:1">${nm(g.from)} → ${nm(g.to)}<div class="s">${D.lines[g.tr[1]][1]}　${D.heads[g.tr[3]]}行　${fmt(g.arr)}着</div></div><span class="s">›</span></div>`;
   });
-  return h + '</div>';
+  $('#shb').innerHTML = h; $('#sh').classList.add('on');
 }
-function search() {
-  const a = +$('#fr').value, b = +$('#to').value;
-  if (a === b) { $('#o3').innerHTML = '<p class="s">出発と到着が同じ駅です。</p>'; return; }
-  let t = now(), h = ''; const seen = new Set();
-  for (let i = 0; i < 3; i++) {
-    const L = route(a, b, t); if (!L) break;
-    const key = L[0].dep + '_' + L[L.length - 1].arr; if (seen.has(key)) break;
-    seen.add(key); h += routeCard(L); t = L[0].dep + 0.5;
-  }
-  $('#o3').innerHTML = h || '<p class="s">この時刻以降に、大津線の中で行ける経路がありません。</p>';
+function loadMR() { try { MR = JSON.parse(localStorage.getItem('ll_rt') || '[]'); } catch (e) { MR = []; } MR = MR.filter(r => D.stations[r[0]] && D.stations[r[1]]); }
+function saveMR() { try { localStorage.setItem('ll_rt', JSON.stringify(MR)); } catch (e) {} drawMR(); }
+function drawMR() {
+  $('#myr').innerHTML = MR.map((r, i) => `<div class="rw" data-mr="${i}"><div style="flex:1">${D.stations[r[0]][1]} - ${D.stations[r[1]][1]}</div><span class="s" data-rm3="${i}" style="padding:0 8px">×</span></div>`).join('') || '<p class="s">まだありません。</p>';
 }
-const render = () => { if (!D) return; setDay(); board(); trains(); };
+const render = () => { if (!D) return; setDay(); board(); trains(); $('#tmv').textContent = $('#tm').value ? '⏱ ' + $('#tm').value + ' 出発' : '⏱ 現在時刻'; };
 function show(n) {
   for (const i of [1, 2, 3]) { $('#p' + i).hidden = i !== n; $('#b' + i).classList.toggle('on', i === n); }
 }
@@ -254,13 +289,26 @@ fetch('timetable.json').then(r => r.json()).then(j => {
     for (const i of L[2]) if (!seen.has(i)) { seen.add(i); h += `<option value="${i}">${D.stations[i][1]}</option>`; }
     h += '</optgroup>';
   }
-  $('#st').innerHTML = '<option value="" selected disabled>駅を選ぶ…</option>' + h; $('#fr').innerHTML = h; $('#to').innerHTML = h; $('#to').selectedIndex = $('#to').options.length - 1; loadMy(); render(); setInterval(render, 15000);
+  $('#st').innerHTML = '<option value="" selected disabled>駅を選ぶ…</option>' + h; $('#fr').innerHTML = h; $('#to').innerHTML = h; $('#to').selectedIndex = $('#to').options.length - 1; loadMy(); loadMR(); drawMR(); render(); setInterval(render, 15000);
 }).catch(() => { $('#o1').textContent = 'timetable.json を読み込めません。サーバー経由（GitHub Pages など）で開いてください。'; });
 $('#tm').oninput = $('#dy').onchange = render; $('#rf').onclick = render;
 $('#b1').onclick = () => show(1); $('#b2').onclick = () => show(2); $('#b3').onclick = () => show(3);
 $('#go').onclick = search; $('#sw').onclick = () => { const x = $('#fr').value; $('#fr').value = $('#to').value; $('#to').value = x; };
 const tap = e => { const el = e.target.closest('[data-tr]'); if (el) sheet(+el.dataset.tr); };
-$('#o2').onclick = $('#o3').onclick = tap;
+$('#o2').onclick = tap;
+$('#f3').onclick = e => {
+  const t = e.target, r = t.closest('[data-mr]');
+  if (t.id === 'svr') { const a = +$('#fr').value, b = +$('#to').value; if (a !== b && !MR.some(x => x[0] === a && x[1] === b)) { MR.push([a, b]); saveMR(); } }
+  else if (t.dataset.rm3 !== undefined) { MR.splice(+t.dataset.rm3, 1); saveMR(); }
+  else if (r) { const x = MR[+r.dataset.mr]; $('#fr').value = x[0]; $('#to').value = x[1]; search(); }
+};
+$('#r3').onclick = e => {
+  const t = e.target, c = t.closest('[data-ri]');
+  if (t.id === 'bk') { $('#r3').hidden = true; $('#f3').hidden = false; }
+  else if (t.id === 'rtb') { useDelay = !useDelay; render(); search(); }
+  else if (t.dataset.o) { ord = t.dataset.o; showRes(); }
+  else if (c) routeSheet(+c.dataset.ri);
+};
 $('#shb').addEventListener('click', e => { const el = e.target.closest('[data-tr]'); if (el) sheet(+el.dataset.tr); });
 $('#p1').onclick = e => {
   const t = e.target, c = t.closest('[data-si]'), tr = t.closest('[data-tr]');
