@@ -138,38 +138,39 @@ function dayList(si) {
   }
   $('#shb').innerHTML = h; $('#sh').classList.add('on');
 }
-const GAP = 46, TOP = 26, BX = 170, UP = ['to_ishiyama', 'up'];
+const GAP = 46, TOP = 26, UP = ['to_ishiyama', 'up'], BXS = [540, 170];
 function trains() {
-  const t = now(); let h = '';
+  const t = now(), nm = i => D.stations[i][1], HI = D.lines[1][2].indexOf(HAMA);
+  const offs = [HI - (D.lines[0][2].length - 1), 0], H = TOP * 2 + GAP * 20;   // 京津線は、浜大津の高さを石山坂本線に合わせて置く
+  const hy = TOP + HI * GAP; let g = `<line x1="${BXS[1]}" y1="${hy}" x2="${BXS[0]}" y2="${hy}" stroke="#bbb" stroke-width="5" stroke-dasharray="4 4"/>`, total = 0, cap = '';
   D.lines.forEach((L, li) => {
-    const pos = {}; L[2].forEach((x, i) => pos[x] = i);
-    const H = TOP * 2 + GAP * (L[2].length - 1), items = [];
+    const BX = BXS[li], pos = {}, items = []; L[2].forEach((x, i) => pos[x] = i + offs[li]);
     for (const tr of TR) {
       if (tr[1] !== li) continue;
       const p = locate(tr, t); if (!p) continue;
       const a = pos[tr[5][p.k]], b = p.w ? a : pos[tr[5][p.k + 1]];
       items.push({ tr, p, up: UP.includes(D.dirs[tr[2]]), y: TOP + (a + (b - a) * (p.f || 0)) * GAP });
     }
-    items.sort((u, v) => u.y - v.y);
+    total += items.length; items.sort((u, v) => u.y - v.y);
     const cols = [[], []];
     for (const it of items) {
       const sd = it.up ? 0 : 1, c = cols[sd]; let k = 0;
       while (c[k] !== undefined && it.y - c[k] < 52) k++;
       c[k] = it.y; it.x = BX + (sd ? 34 + k * 36 : -34 - k * 36);
     }
-    let g = `<svg viewBox="0 0 360 ${H}" role="img" aria-label="${L[1]}の列車位置"><line x1="${BX}" y1="${TOP}" x2="${BX}" y2="${H - TOP}" stroke="#2f6fb5" stroke-width="12" stroke-linecap="round"/>`;
+    const y0 = TOP + offs[li] * GAP, y1 = TOP + (L[2].length - 1 + offs[li]) * GAP;
+    g += `<line x1="${BX}" y1="${y0}" x2="${BX}" y2="${y1}" stroke="${LC[li]}" stroke-width="12" stroke-linecap="round"/><text x="${BX}" y="${y0 - 16}" text-anchor="middle" font-size="13" font-weight="700" fill="currentColor">${L[1]}</text>`;
     L[2].forEach((si, i) => {
-      const y = TOP + i * GAP;
-      g += `<circle cx="${BX}" cy="${y}" r="9" fill="#fff" stroke="#2f6fb5" stroke-width="4"/><text x="6" y="${y + 5}" font-size="13" fill="currentColor">${D.stations[si][1]}</text>`;
+      const y = TOP + (i + offs[li]) * GAP;
+      g += `<circle cx="${BX}" cy="${y}" r="9" fill="#fff" stroke="${LC[li]}" stroke-width="4"/><text x="${BX - 164}" y="${y + 5}" font-size="13" fill="currentColor">${nm(si)}</text>`;
     });
     for (const it of items) {
       const { x, y, up, tr } = it, d = dl(tr, it.p.k);
-      g += `<g data-tr="${tr[0]}" style="cursor:pointer"><rect x="${x - 14}" y="${y - 17}" width="28" height="34" rx="9" fill="#2f6fb5"/><rect x="${x - 8}" y="${y - 11}" width="16" height="9" rx="2" fill="#fff" opacity=".85"/><path d="${up ? `M${x - 6} ${y - 24}h12l-6 -9z` : `M${x - 6} ${y + 24}h12l-6 9z`}" fill="#f0902f"/>${d ? `<text x="${x}" y="${up ? y + 34 : y - 22}" text-anchor="middle" font-size="14" font-weight="700" fill="#f0902f">+${d}</text>` : ''}</g>`;
+      g += `<g data-tr="${tr[0]}" style="cursor:pointer"><rect x="${x - 14}" y="${y - 17}" width="28" height="34" rx="9" fill="${LC[li]}" stroke="rgba(0,0,0,.3)"/><rect x="${x - 8}" y="${y - 11}" width="16" height="9" rx="2" fill="#fff" opacity=".9"/><path d="${up ? `M${x - 6} ${y - 24}h12l-6 -9z` : `M${x - 6} ${y + 24}h12l-6 9z`}" fill="#f0902f"/>${d ? `<text x="${x}" y="${up ? y + 34 : y - 22}" text-anchor="middle" font-size="14" font-weight="700" fill="#f0902f">+${d}</text>` : ''}</g>`;
     }
-    const n0 = D.stations[L[2][0]][1], n1 = D.stations[L[2][L[2].length - 1]][1];
-    h += `<h2>${L[1]}（走行中 ${items.length}本）</h2><p class="s">▲ ${n0}方面（左）　▼ ${n1}方面（右）　列車をタップすると全駅の時刻が出ます</p><div class="dg">${g}</svg></div>`;
+    cap += `<br>${L[1]}：▲ ${nm(L[2][0])}方面（左）　▼ ${nm(L[2][L[2].length - 1])}方面（右）`;
   });
-  $('#o2').innerHTML = h;
+  $('#o2').innerHTML = `<h2>走行中の列車（${total}本）</h2><p class="s">列車をタップすると、全駅の時刻が出ます。${cap}</p><div class="dg" style="overflow-x:auto"><svg viewBox="0 0 680 ${H}" role="img" aria-label="大津線の列車位置" style="display:block;width:100%;min-width:620px;max-width:760px;margin:0 auto">${g}</svg></div>`;
 }
 function sheet(id) {
   const tr = TR.find(x => x[0] === id), t = now(), p = locate(tr, t), S = tr[5], T = tr[6], n = S.length;
@@ -222,7 +223,7 @@ const XFER = { default: 1, 'biwako-hamaotsu': 1 };   // 乗換に必要な分。
 const xf = s => XFER[D.stations[s][0]] ?? XFER.default;
 const DWELL = { 'biwako-hamaotsu': 1 };   // 停車時間（分）。時刻表には発車時刻しかないので、到着は発車の何分前とみなすか。浜大津は本家の結果と合わせた値
 const dw = s => DWELL[D.stations[s][0]] ?? 0;
-const LC = ['#d9822b', '#2f8f5b'];         // 路線の印の色（京津線、石山坂本線）
+const LC = ['#7FCDD1', '#8DB987'];         // 路線の印の色（京津線、石山坂本線）
 let RES = [], ord = 'a', AB = [0, 0], MR = [];
 function route(a, b, t0) {
   const C = [];
@@ -262,7 +263,7 @@ function showRes() {
   $('#rtb').textContent = 'リアルタイム経路検索 ' + (useDelay ? 'ON' : 'OFF');
   document.querySelectorAll('.tbn[data-o]').forEach(e => e.classList.toggle('on', e.dataset.o === ord));
   const R2 = RES.map((L, i) => [L, i]).sort((x, y) => (ord === 't' ? x[0].length - y[0].length : 0) || arrOf(x[0]) - arrOf(y[0]) || x[0][0].dep - y[0][0].dep);
-  $('#o3').innerHTML = R2.map(([L, i]) => `<div class="rc" data-ri="${i}"><div class="tt">${fmt(L[0].dep)} - ${fmt(arrOf(L))}</div><div class="mt">⏱ ${Math.round(arrOf(L) - L[0].dep)}分　⇄ 乗換 ${L.length - 1}回</div>${L.map(g => `<span class="lg" style="background:${LC[g.tr[1]]}">🚃 ${D.lines[g.tr[1]][1]}</span>`).join('')}</div>`).join('') || '<p class="s">この時刻以降に、大津線の中で行ける経路がありません。</p>';
+  $('#o3').innerHTML = R2.map(([L, i]) => `<div class="rc" data-ri="${i}"><div class="tt">${fmt(L[0].dep)} - ${fmt(arrOf(L))}</div><div class="mt">⏱ ${Math.round(arrOf(L) - L[0].dep)}分　⇄ 乗換 ${L.length - 1}回</div>${L.map(g => `<span class="lg" style="background:${LC[g.tr[1]]};color:#16322e">🚃 ${D.lines[g.tr[1]][1]}</span>`).join('')}</div>`).join('') || '<p class="s">この時刻以降に、大津線の中で行ける経路がありません。</p>';
 }
 function routeSheet(i) {
   const L = RES[i], nm = x => D.stations[x][1];
