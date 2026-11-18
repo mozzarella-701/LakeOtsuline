@@ -1,8 +1,7 @@
-// Firebaseコンソール →（歯車）プロジェクトの設定 →「マイアプリ」のウェブアプリの「SDKの設定と構成」の値を、下の4つに貼る。
-// この値は公開されても大丈夫な設定です（パスワードではありません）。データを守るのは firestore.rules です。
+// LAKE LOADs の Firebase ウェブアプリの設定。公開されても問題ない値です（データを守るのは firestore.rules）。
 window.FB_CONFIG = {
-  apiKey: 'ここにapiKey',
-  authDomain: 'ここにauthDomain',
-  projectId: 'ここにprojectId',
-  appId: 'ここにappId',
+  apiKey: 'AIzaSyBitFipgF8uOCVF4BW8IiwTtO2KBBf3nWE',
+  authDomain: 'lake-loads.firebaseapp.com',
+  projectId: 'lake-loads',
+  appId: '1:744485508765:web:ac561affb5e2790381e674',
 };

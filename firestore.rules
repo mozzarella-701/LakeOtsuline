@@ -1,0 +1,25 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 会員情報: 本人だけが読み書きできる
+    match /users/{uid} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow create, update: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['name', 'email', 'updatedAt'])
+        && request.resource.data.name is string && request.resource.data.name.size() <= 50
+        && request.resource.data.email == request.auth.token.email;
+    }
+    // お問い合わせ: 会員だけが、自分の名義で送れる。読むのは管理者（Firebaseコンソール）だけ
+    match /inquiries/{id} {
+      allow create: if request.auth != null
+        && request.resource.data.keys().hasOnly(['name', 'email', 'kind', 'message', 'uid', 'createdAt'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.name is string && request.resource.data.name.size() <= 50
+        && request.resource.data.kind in ['不具合の報告', '時刻表の誤り', 'ご要望', 'その他']
+        && request.resource.data.message is string && request.resource.data.message.size() >= 5 && request.resource.data.message.size() <= 2000
+        && request.resource.data.createdAt == request.time;
+      allow read, update, delete: if false;
+    }
+  }
+}
