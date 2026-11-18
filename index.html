@@ -61,6 +61,7 @@ h2{font-size:14px;margin:16px 0 6px;color:var(--sub)}
 <div id="chips"></div><div id="o1"></div>
 </div>
 <div id="p2" hidden><div id="o2"></div></div>
+<div id="p4" hidden><h2>会員・お問い合わせ</h2><div id="o4"></div></div>
 <div id="p3" hidden>
 <div id="f3"><h2>経路検索</h2><div class="card">
 <div class="my"><select id="fr" aria-label="出発駅"></select><span class="lnk" id="sw">⇄</span><select id="to" aria-label="到着駅"></select></div>
@@ -71,8 +72,9 @@ h2{font-size:14px;margin:16px 0 6px;color:var(--sub)}
 <div class="tabs"><span class="tbn on" data-o="a">早い順</span><span class="tbn dis">安い順</span><span class="tbn" data-o="t">乗換順(少)</span></div>
 <div class="rtb" id="rtb"></div><div id="o3"></div></div></div>
 </main>
-<nav class="tb"><button id="b1" class="on">ホーム</button><button id="b3">乗換案内</button><button id="b2">列車走行位置</button></nav>
+<nav class="tb"><button id="b1" class="on">ホーム</button><button id="b3">乗換案内</button><button id="b2">列車走行位置</button><button id="b4">会員・問合せ</button></nav>
 <div id="sh"><div id="shb"></div></div>
+<script src="firebase-config.js"></script>
 <script>
 let D, R = {}, TR = [], HAMA = -1, useDelay = true, MY = [], cur = -1, more = false;
 const $ = s => document.querySelector(s);
@@ -142,7 +144,7 @@ const GAP = 46, TOP = 26, UP = ['to_ishiyama', 'up'], BXS = [540, 170];
 function trains() {
   const t = now(), nm = i => D.stations[i][1], HI = D.lines[1][2].indexOf(HAMA);
   const offs = [HI - (D.lines[0][2].length - 1), 0], H = TOP * 2 + GAP * 20;   // 京津線は、浜大津の高さを石山坂本線に合わせて置く
-  const hy = TOP + HI * GAP; let g = `<line x1="${BXS[1]}" y1="${hy}" x2="${BXS[0]}" y2="${hy}" stroke="#bbb" stroke-width="5" stroke-dasharray="4 4"/>`, total = 0, cap = '';
+  const hy = TOP + HI * GAP; let g = `<line x1="${BXS[1]}" y1="${hy}" x2="${BXS[0]}" y2="${hy}" stroke="#bbb" stroke-width="5" stroke-dasharray="4 4"/><text x="${(BXS[0] + BXS[1]) / 2}" y="${hy - 10}" text-anchor="middle" font-size="12" fill="currentColor">びわ湖浜大津で乗換</text>`, total = 0, cap = '';
   D.lines.forEach((L, li) => {
     const BX = BXS[li], pos = {}, items = []; L[2].forEach((x, i) => pos[x] = i + offs[li]);
     for (const tr of TR) {
@@ -162,11 +164,11 @@ function trains() {
     g += `<line x1="${BX}" y1="${y0}" x2="${BX}" y2="${y1}" stroke="${LC[li]}" stroke-width="12" stroke-linecap="round"/><text x="${BX}" y="${y0 - 16}" text-anchor="middle" font-size="13" font-weight="700" fill="currentColor">${L[1]}</text>`;
     L[2].forEach((si, i) => {
       const y = TOP + (i + offs[li]) * GAP;
-      g += `<circle cx="${BX}" cy="${y}" r="9" fill="#fff" stroke="${LC[li]}" stroke-width="4"/><text x="${BX - 164}" y="${y + 5}" font-size="13" fill="currentColor">${nm(si)}</text>`;
+      g += `<circle cx="${BX}" cy="${y}" r="9" fill="#fff" stroke="${LC[li]}" stroke-width="4"/>` + (li === 0 && si === HAMA ? '' : `<text x="${BX - 164}" y="${y + 5}" font-size="13" fill="currentColor">${nm(si)}</text>`);
     });
     for (const it of items) {
       const { x, y, up, tr } = it, d = dl(tr, it.p.k);
-      g += `<g data-tr="${tr[0]}" style="cursor:pointer"><rect x="${x - 14}" y="${y - 17}" width="28" height="34" rx="9" fill="${LC[li]}" stroke="rgba(0,0,0,.3)"/><rect x="${x - 8}" y="${y - 11}" width="16" height="9" rx="2" fill="#fff" opacity=".9"/><path d="${up ? `M${x - 6} ${y - 24}h12l-6 -9z` : `M${x - 6} ${y + 24}h12l-6 9z`}" fill="#f0902f"/>${d ? `<text x="${x}" y="${up ? y + 34 : y - 22}" text-anchor="middle" font-size="14" font-weight="700" fill="#f0902f">+${d}</text>` : ''}</g>`;
+      g += `<g data-tr="${tr[0]}" style="cursor:pointer"><rect x="${x - 14}" y="${y - 17}" width="28" height="34" rx="9" fill="${LC[li]}" stroke="rgba(0,0,0,.3)"/><rect x="${x - 8}" y="${y - 11}" width="16" height="9" rx="2" fill="#fff" opacity=".9"/><text x="${x}" y="${y + 12}" text-anchor="middle" font-size="13" font-weight="700" fill="#16322e">${D.heads[tr[3]][0] === 'び' ? '浜' : D.heads[tr[3]][0]}</text><path d="${up ? `M${x - 6} ${y - 24}h12l-6 -9z` : `M${x - 6} ${y + 24}h12l-6 9z`}" fill="#f0902f"/>${d ? `<text x="${x}" y="${up ? y + 34 : y - 22}" text-anchor="middle" font-size="14" font-weight="700" fill="#f0902f">+${d}</text>` : ''}</g>`;
     }
     cap += `<br>${L[1]}：▲ ${nm(L[2][0])}方面（左）　▼ ${nm(L[2][L[2].length - 1])}方面（右）`;
   });
@@ -279,9 +281,62 @@ function saveMR() { try { localStorage.setItem('ll_rt', JSON.stringify(MR)); } c
 function drawMR() {
   $('#myr').innerHTML = MR.map((r, i) => `<div class="rw" data-mr="${i}"><div style="flex:1">${D.stations[r[0]][1]} - ${D.stations[r[1]][1]}</div><span class="s" data-rm3="${i}" style="padding:0 8px">×</span></div>`).join('') || '<p class="s">まだありません。</p>';
 }
+// ---- 会員・お問い合わせ（Firebase Authentication + Firestore）----
+const esc = x => String(x).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const ERR = { 'auth/invalid-email': 'メールアドレスの形式が正しくありません。', 'auth/email-already-in-use': 'このメールアドレスは、すでに登録されています。', 'auth/weak-password': 'パスワードは6文字以上にしてください。',
+  'auth/invalid-credential': 'メールアドレスまたはパスワードが違います。', 'auth/user-not-found': 'メールアドレスまたはパスワードが違います。', 'auth/wrong-password': 'メールアドレスまたはパスワードが違います。',
+  'auth/too-many-requests': '試行回数が多すぎます。しばらくしてからやり直してください。', 'auth/missing-password': 'パスワードを入力してください。', 'permission-denied': '送信できませんでした。ログインし直してください。' };
+const errJa = e => ERR[e && e.code] || 'エラーが起きました（' + ((e && e.code) || e) + '）';
+let amode = 'in';
+function drawAcct() {
+  const f = window.fb, el = $('#o4');
+  if (!f || !f.ready) { el.innerHTML = '<p class="s">会員機能は準備中です（Firebaseの設定が、まだ入力されていません）。</p>'; return; }
+  const u = f.user();
+  if (!u) {
+    el.innerHTML = `<div class="card"><div class="tabs"><span class="tbn${amode === 'in' ? ' on' : ''}" data-am="in">ログイン</span><span class="tbn${amode === 'up' ? ' on' : ''}" data-am="up">新規会員登録</span></div>
+<label class="s">メールアドレス<br><input id="em" type="email" autocomplete="email" style="width:100%"></label><br>
+<label class="s">パスワード（6文字以上）<br><input id="pw" type="password" autocomplete="${amode === 'in' ? 'current-password' : 'new-password'}" style="width:100%"></label>
+${amode === 'up' ? '<p class="s"><label><input type="checkbox" id="agr"> 個人情報の取扱いに同意する</label></p><p class="s">取得する情報: メールアドレス、お名前（任意）、お問い合わせの内容。利用目的: 会員の認証と、お問い合わせへの返信のみ。法令に基づく場合を除き、第三者には提供しません。パスワードは、認証サービス（Firebase Authentication）が管理し、運営者は見られません。</p>' : ''}
+<button class="go" id="am-go">${amode === 'in' ? 'ログイン' : '登録する'}</button>
+${amode === 'in' ? '<p class="s"><span class="lnk" id="am-rs">パスワードを忘れた</span></p>' : ''}<p class="s late" id="am-msg"></p>
+<p class="s">お問い合わせは、会員登録（無料）後にご利用いただけます。</p></div>`;
+    return;
+  }
+  const n = esc(u.displayName || ''), m = esc(u.email);
+  el.innerHTML = `<div class="card"><div class="ch"><b>会員情報</b><span class="lnk" id="am-out" style="margin-left:auto">ログアウト</span></div>
+<div class="s">メールアドレス: ${m}</div><label class="s">お名前（任意）<br><input id="nm" value="${n}" maxlength="50" style="width:100%"></label>
+<button class="wide" id="am-sv">お名前を保存</button><p class="s late" id="am-msg"></p></div>
+<div class="card" style="margin-top:12px"><div class="ch"><b>お問い合わせ</b></div>
+<label class="s">お名前（会員情報から自動入力）<br><input id="qn" value="${n}" maxlength="50" style="width:100%"></label>
+<label class="s">メールアドレス（会員情報から自動入力）<br><input id="qe" value="${m}" readonly style="width:100%"></label>
+<label class="s">種類<br><select id="qk"><option>不具合の報告</option><option>時刻表の誤り</option><option>ご要望</option><option>その他</option></select></label>
+<label class="s">内容<br><textarea id="qm" rows="6" maxlength="2000" style="width:100%;font:inherit"></textarea></label>
+<button class="go" id="q-go">送信</button><p class="s late" id="q-msg"></p></div>`;
+}
+$('#p4').onclick = async e => {
+  const t = e.target, f = window.fb; if (!f || !f.ready) return;
+  const msg = (id, m) => { const x = $('#' + id); if (x) x.textContent = m; };
+  try {
+    if (t.dataset.am) { amode = t.dataset.am; drawAcct(); }
+    else if (t.id === 'am-go') {
+      const em = $('#em').value.trim(), pw = $('#pw').value;
+      if (amode === 'up') { if (!$('#agr').checked) return msg('am-msg', '個人情報の取扱いへの同意が必要です。'); await f.signUp(em, pw); } else await f.signIn(em, pw);
+    } else if (t.id === 'am-rs') {
+      const em = $('#em').value.trim(); if (!em) return msg('am-msg', 'メールアドレスを入力してください。');
+      await f.reset(em); msg('am-msg', '登録されているメールアドレスなら、パスワード再設定のメールが届きます。');
+    } else if (t.id === 'am-out') await f.out();
+    else if (t.id === 'am-sv') { await f.setName($('#nm').value.trim().slice(0, 50)); drawAcct(); msg('am-msg', '保存しました。'); }
+    else if (t.id === 'q-go') {
+      const m = $('#qm').value.trim(); if (m.length < 5) return msg('q-msg', '内容を5文字以上で入力してください。');
+      await f.send({ name: $('#qn').value.trim().slice(0, 50), email: $('#qe').value, kind: $('#qk').value, message: m.slice(0, 2000) });
+      $('#qm').value = ''; msg('q-msg', '送信しました。ありがとうございます。');
+    }
+  } catch (err) { msg('am-msg', errJa(err)); msg('q-msg', errJa(err)); }
+};
+window.addEventListener('fbauth', drawAcct); window.addEventListener('fbready', drawAcct);
 const render = () => { if (!D) return; setDay(); board(); trains(); $('#tmv').textContent = $('#tm').value ? '⏱ ' + $('#tm').value + ' 出発' : '⏱ 現在時刻'; };
 function show(n) {
-  for (const i of [1, 2, 3]) { $('#p' + i).hidden = i !== n; $('#b' + i).classList.toggle('on', i === n); }
+  for (const i of [1, 2, 3, 4]) { $('#p' + i).hidden = i !== n; $('#b' + i).classList.toggle('on', i === n); }
 }
 fetch('timetable.json').then(r => r.json()).then(j => {
   D = j; HAMA = D.stations.findIndex(x => x[0] === 'biwako-hamaotsu'); const seen = new Set(); let h = '';
@@ -293,7 +348,7 @@ fetch('timetable.json').then(r => r.json()).then(j => {
   $('#st').innerHTML = '<option value="" selected disabled>駅を選ぶ…</option>' + h; $('#fr').innerHTML = h; $('#to').innerHTML = h; $('#to').selectedIndex = $('#to').options.length - 1; loadMy(); loadMR(); drawMR(); render(); setInterval(render, 15000);
 }).catch(() => { $('#o1').textContent = 'timetable.json を読み込めません。サーバー経由（GitHub Pages など）で開いてください。'; });
 $('#tm').oninput = $('#dy').onchange = render; $('#rf').onclick = render;
-$('#b1').onclick = () => show(1); $('#b2').onclick = () => show(2); $('#b3').onclick = () => show(3);
+$('#b1').onclick = () => show(1); $('#b2').onclick = () => show(2); $('#b3').onclick = () => show(3); $('#b4').onclick = () => { show(4); drawAcct(); };
 $('#go').onclick = search; $('#sw').onclick = () => { const x = $('#fr').value; $('#fr').value = $('#to').value; $('#to').value = x; };
 const tap = e => { const el = e.target.closest('[data-tr]'); if (el) sheet(+el.dataset.tr); };
 $('#o2').onclick = tap;
@@ -330,4 +385,22 @@ $('#shb').onchange = e => {
   const m = +x.value; if (m) R[x.dataset.id] = { k: +x.dataset.k, min: m }; else delete R[x.dataset.id];
   render(); sheet(+x.dataset.id);
 };
+</script>
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
+import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, sendPasswordResetEmail, updateProfile } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
+import { getFirestore, doc, setDoc, addDoc, collection, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
+const cfg = window.FB_CONFIG, fb = window.fb = { ready: false };
+if (cfg && cfg.apiKey && !String(cfg.apiKey).startsWith('ここに')) {
+  const auth = getAuth(initializeApp(cfg)), db = getFirestore(auth.app);
+  Object.assign(fb, {
+    ready: true, user: () => auth.currentUser,
+    signUp: (e, p) => createUserWithEmailAndPassword(auth, e, p), signIn: (e, p) => signInWithEmailAndPassword(auth, e, p),
+    out: () => signOut(auth), reset: e => sendPasswordResetEmail(auth, e),
+    setName: async n => { await updateProfile(auth.currentUser, { displayName: n }); await setDoc(doc(db, 'users', auth.currentUser.uid), { name: n, email: auth.currentUser.email, updatedAt: serverTimestamp() }, { merge: true }); },
+    send: m => addDoc(collection(db, 'inquiries'), { name: m.name, email: m.email, kind: m.kind, message: m.message, uid: auth.currentUser.uid, createdAt: serverTimestamp() }),
+  });
+  onAuthStateChanged(auth, () => window.dispatchEvent(new Event('fbauth')));
+}
+window.dispatchEvent(new Event('fbready'));
 </script></body></html>
