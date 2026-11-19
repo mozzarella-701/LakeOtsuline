@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>LAKE LOADs（非公式）大津線リアルタイム時刻表</title>
+<title>LAKE LOADs 大津線リアルタイム時刻表</title>
 <style>
 :root{--bg:#fff;--fg:#1c2330;--sub:#667085;--line:#e3e7ee;--acc:#0b6bcb;--late:#c2410c;--card:#f6f8fb}
 @media(prefers-color-scheme:dark){:root{--bg:#10151d;--fg:#e8ecf3;--sub:#9aa6b8;--line:#263041;--acc:#6db3ff;--late:#fb923c;--card:#171e29}}
@@ -51,7 +51,6 @@ h2{font-size:14px;margin:16px 0 6px;color:var(--sub)}
 .dg svg{display:block;width:100%;max-width:420px;margin:0 auto}
 </style></head><body><header>LAKE LOADs<button id="rf" aria-label="更新">⟳</button></header>
 <main>
-<p class="s">京阪電車の公式サービスではありません。時刻表をもとにした推定で、実際の運行とは異なる場合があります。</p>
 <div class="warn" id="dayinfo"></div>
 <label class="s">時刻を指定（空欄＝現在） <input id="tm" type="time"></label>
 <label class="s">　ダイヤ <select id="dy"><option value="">自動</option><option value="weekday">平日</option><option value="holiday">土休日</option></select></label>
@@ -218,7 +217,7 @@ function autoDay() {
 function setDay() {
   const v = $('#dy').value, k = v || autoDay(), di = Math.max(0, D.days.findIndex(x => x[0] === k));
   TR = D.trips.filter(t => t[7] === di);
-  $('#dayinfo').innerHTML = `いまは<b>${D.days[di][1]}ダイヤ</b>で表示しています${v ? '（手動で選択）' : '（日付から自動で判定。祝日・年末年始は土休日扱い）'}。臨時ダイヤの日は実際と異なります。遅れの入力は、この画面の中だけで反映され、他の人には共有されません。`;
+  $('#dayinfo').innerHTML = `いまは<b>${D.days[di][1]}ダイヤ</b>で表示しています${v ? '（手動で選択）' : '（日付から自動で判定。祝日・年末年始は土休日扱い）'}。遅れの入力は、この画面の中だけで反映され、他の人には共有されません。`;
 }
 // 乗換案内: 全列車の「駅→次の駅」を時刻順に走査して、最も早く着く経路を求める
 const XFER = { default: 1, 'biwako-hamaotsu': 1 };   // 乗換に必要な分。浜大津は1分（指定）。他の駅は調査後に更新する
