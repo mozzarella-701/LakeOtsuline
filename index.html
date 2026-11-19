@@ -228,8 +228,12 @@ const dw = s => DWELL[D.stations[s][0]] ?? 0;
 const LC = ['#7FCDD1', '#8DB987'];         // 路線の印の色（京津線、石山坂本線）
 let RES = [], ord = 'a', AB = [0, 0], MR = [];
 function route(a, b, t0) {
+  // 折り返し乗車（行き過ぎて戻る乗り方）を出さない: 到着駅に1駅でも近づく区間だけを使う
+  const adj = {}, hd = { [b]: 0 }, q = [b];
+  for (const L of D.lines) for (let i = 0; i < L[2].length - 1; i++) { (adj[L[2][i]] ??= []).push(L[2][i + 1]); (adj[L[2][i + 1]] ??= []).push(L[2][i]); }
+  for (let i = 0; i < q.length; i++) for (const n of adj[q[i]] || []) if (hd[n] === undefined) { hd[n] = hd[q[i]] + 1; q.push(n); }
   const C = [];
-  for (const tr of TR) { const S = tr[5], T = tr[6]; for (let k = 0; k < S.length - 1; k++) C.push({ tr, f: S[k], t: S[k + 1], d: T[k] + dlb(tr, k), a: T[k + 1] + dlb(tr, k + 1) - (k + 1 < S.length - 1 ? dw(S[k + 1]) : 0) }); }
+  for (const tr of TR) { const S = tr[5], T = tr[6]; for (let k = 0; k < S.length - 1; k++) if (hd[S[k + 1]] < hd[S[k]]) C.push({ tr, f: S[k], t: S[k + 1], d: T[k] + dlb(tr, k), a: T[k + 1] + dlb(tr, k + 1) - (k + 1 < S.length - 1 ? dw(S[k + 1]) : 0) }); }
   C.sort((x, y) => x.d - y.d);
   const arr = { [a]: t0 }, pred = {}, on = {}, bd = {};
   for (const c of C) {
