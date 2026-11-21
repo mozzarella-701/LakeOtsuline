@@ -119,7 +119,7 @@ function board() {
   let c = `<div class="card"><div class="ch"><b>${nmS(cur)}</b>${late ? `<span class="badge">▲ 遅れ等 ${late}件</span>` : ''}<label class="s tg">遅れ反映 <input type="checkbox" id="ud"${useDelay ? ' checked' : ''}></label></div>`;
   for (const key of keys) {
     const [li, di] = key.split('_').map(Number);
-    c += `<div class="band">${D.lines[li][1]}　${DIR[D.dirs[di]]}</div>`;
+    c += `<div class="band">${D.lines[li][1]}　${dirName(D.dirs[di])}</div>`;
     for (const [e, s0, tr] of g[key].sort((a, b) => a[0] - b[0]).slice(0, more ? 8 : 3)) {
       const d = Math.round(e - s0), ahead = tr[4] >= 0 && tr[5].indexOf(HAMA) >= tr[5].indexOf(cur);
       c += `<div class="rw" data-tr="${tr[0]}"><div class="tm">${d ? `<s>${fmt(s0)}</s>` : ''}<b class="${d ? 'late' : ''}">${fmt(e)}</b></div><div style="flex:1">${D.heads[tr[3]]}行<div class="s">${ahead ? D.notes[tr[4]] : ''}${tr[8] >= 0 ? ` <span class="late">${D.snotes[tr[8]]}</span>` : ''}</div></div><span class="s">›</span></div>`;
@@ -136,7 +136,7 @@ function dayList(si) {
   let h = `<span id="x" style="float:right;padding:0 6px;font-size:22px;cursor:pointer">✕</span><b>${nmS(si)}　時刻表</b><p class="s">時刻をタップすると、その列車の全駅の時刻が出ます。</p>`;
   for (const key of Object.keys(g).sort()) {
     const [li, di] = key.split('_').map(Number);
-    h += `<h2>${D.lines[li][1]}　${DIR[D.dirs[di]]}</h2><div class="gr">${g[key].sort((a, b) => a[0] - b[0]).map(([m, id]) => `<span data-tr="${id}">${fmt(m)}</span>`).join('')}</div>`;
+    h += `<h2>${D.lines[li][1]}　${dirName(D.dirs[di])}</h2><div class="gr">${g[key].sort((a, b) => a[0] - b[0]).map(([m, id]) => `<span data-tr="${id}">${fmt(m)}</span>`).join('')}</div>`;
   }
   $('#shb').innerHTML = h; $('#sh').classList.add('on');
 }
@@ -146,6 +146,7 @@ function trains() {
   const offs = [HI - (D.lines[0][2].length - 1), 0], H = TOP * 2 + GAP * 20;   // 京津線は、浜大津の高さを石山坂本線に合わせて置く
   const hy = TOP + HI * GAP; let g = `<line x1="${BXS[1]}" y1="${hy}" x2="${BXS[0]}" y2="${hy}" stroke="#bbb" stroke-width="5" stroke-dasharray="4 4"/><text x="${(BXS[0] + BXS[1]) / 2}" y="${hy - 10}" text-anchor="middle" font-size="12" fill="currentColor">びわ湖浜大津で乗換</text>`, total = 0, cap = '';
   D.lines.forEach((L, li) => {
+    if (L[3] === 'bus') return;
     const BX = BXS[li], pos = {}, items = []; L[2].forEach((x, i) => pos[x] = i + offs[li]);
     for (const tr of TR) {
       if (tr[1] !== li) continue;
@@ -178,7 +179,7 @@ function sheet(id) {
   const tr = TR.find(x => x[0] === id), t = now(), p = locate(tr, t), S = tr[5], T = tr[6], n = S.length;
   const cur = p ? p.k : -1, done = !p && t >= T[n - 1], nm = k => D.stations[S[k]][1];
   const d0 = p ? dl(tr, p.k) : 0;
-  let h = `<span id="x" style="float:right;padding:0 6px;font-size:22px;cursor:pointer">✕</span><b>${D.lines[tr[1]][1]}　${D.heads[tr[3]]}行</b> <span class="s">#${tr[0]}　${DIR[D.dirs[tr[2]]]}</span>`;
+  let h = `<span id="x" style="float:right;padding:0 6px;font-size:22px;cursor:pointer">✕</span><b>${D.lines[tr[1]][1]}　${D.heads[tr[3]]}行</b> <span class="s">#${tr[0]}　${dirName(D.dirs[tr[2])]}</span>`;
   h += `<div class="s">${p ? (p.w ? nm(0) + ' で発車待ち' : nm(p.k) + ' → ' + nm(p.k + 1) + ' を走行中') : (done ? '運行を終えました' : 'まだ出発していません')}${tr[4] >= 0 ? '<br>' + D.notes[tr[4]] : ''}${tr[8] >= 0 ? '<br>' + D.snotes[tr[8]] : ''}</div>`;
   h += `<p class="s">この列車の遅れ（この画面のみ）： <select id="dsel" data-id="${tr[0]}" data-k="${Math.max(cur, 0)}"><option value="0">遅れなし</option>${[1, 2, 3, 5, 10, 15, 20].map(x => `<option value="${x}"${d0 === x ? ' selected' : ''}>+${x}分</option>`).join('')}</select></p>`;
   S.forEach((si, k) => {
@@ -222,33 +223,44 @@ function setDay() {
 }
 // 乗換案内: 全列車の「駅→次の駅」を時刻順に走査して、最も早く着く経路を求める
 const XFER = { default: 1, 'biwako-hamaotsu': 1 };   // 乗換に必要な分。浜大津は1分（指定）。他の駅は調査後に更新する
-const xf = s => XFER[D.stations[s][0]] ?? XFER.default;
+const xf = s => XFER[D.stations[s][0]] ?? (D.stations[s][0].startsWith('bus:') ? 5 : XFER.default);   // バス停は5分
 const DWELL = { 'biwako-hamaotsu': 1 };   // 停車時間（分）。時刻表には発車時刻しかないので、到着は発車の何分前とみなすか。浜大津は本家の結果と合わせた値
 const dw = s => DWELL[D.stations[s][0]] ?? 0;
-const LC = ['#7FCDD1', '#8DB987'];         // 路線の印の色（京津線、石山坂本線）
+const LC = ['#7FCDD1', '#8DB987', '#E9C46A'];   // 京津線、石山坂本線、江若交通バス         // 路線の印の色（京津線、石山坂本線）
 let RES = [], ord = 'a', AB = [0, 0], MR = [];
 function route(a, b, t0) {
-  // 折り返し乗車（行き過ぎて戻る乗り方）を出さない: 到着駅に1駅でも近づく区間だけを使う
-  const adj = {}, hd = { [b]: 0 }, q = [b];
-  for (const L of D.lines) for (let i = 0; i < L[2].length - 1; i++) { (adj[L[2][i]] ??= []).push(L[2][i + 1]); (adj[L[2][i + 1]] ??= []).push(L[2][i]); }
+  const wk = {};
+  for (const [x, y, m] of D.walk || []) { (wk[x] ??= []).push([y, m]); (wk[y] ??= []).push([x, m]); }
+  // 折り返し乗車を出さない: 到着駅に1駅でも近づく区間だけを使う
+  const adj = {}, hd = { [b]: 0 }, q = [b], link = (x, y) => { (adj[x] ??= []).push(y); (adj[y] ??= []).push(x); };
+  for (const L of D.lines) if (!L[3]) for (let i = 0; i < L[2].length - 1; i++) link(L[2][i], L[2][i + 1]);
+  for (const tr of TR) if (D.lines[tr[1]][3]) for (let k = 0; k < tr[5].length - 1; k++) link(tr[5][k], tr[5][k + 1]);
+  for (const x in wk) for (const [y] of wk[x]) link(+x, y);
   for (let i = 0; i < q.length; i++) for (const n of adj[q[i]] || []) if (hd[n] === undefined) { hd[n] = hd[q[i]] + 1; q.push(n); }
   const C = [];
-  for (const tr of TR) { const S = tr[5], T = tr[6]; for (let k = 0; k < S.length - 1; k++) if (hd[S[k + 1]] < hd[S[k]]) C.push({ tr, f: S[k], t: S[k + 1], d: T[k] + dlb(tr, k), a: T[k + 1] + dlb(tr, k + 1) - (k + 1 < S.length - 1 ? dw(S[k + 1]) : 0) }); }
+  for (const tr of TR) { const S = tr[5], T = tr[6]; for (let k = 0; k < S.length - 1; k++) if (hd[S[k + 1]] < hd[S[k]]) C.push({ tr, f: S[k], t: S[k + 1], d: T[k] + dlb(tr, k), a: T[k + 1] + dlb(tr, k + 1) - (k + 1 < S.length - 1 && !D.lines[tr[1]][3] ? dw(S[k + 1]) : 0) }); }
   C.sort((x, y) => x.d - y.d);
-  const arr = { [a]: t0 }, pred = {}, on = {}, bd = {};
+  const arr = { [a]: t0 }, pred = {}, on = {}, bd = {}, vw = {};
   for (const c of C) {
     const id = c.tr[0];
     if (!on[id]) {
-      if (arr[c.f] === undefined || c.d < arr[c.f] + (c.f === a && !pred[c.f] ? 0 : xf(c.f))) continue;
+      if (arr[c.f] === undefined || c.d < arr[c.f] + ((vw[c.f] || (c.f === a && !pred[c.f])) ? 0 : xf(c.f))) continue;
       on[id] = true; bd[id] = { c, prev: pred[c.f] || null };
     }
-    if (c.a < (arr[c.t] ?? 1e9)) { arr[c.t] = c.a; pred[c.t] = c; }
+    if (c.a < (arr[c.t] ?? 1e9)) {
+      arr[c.t] = c.a; pred[c.t] = c; vw[c.t] = false;
+      for (const [y, m] of wk[c.t] || []) if (y !== b && c.a + m < (arr[y] ?? 1e9)) { arr[y] = c.a + m; pred[y] = c; vw[y] = true; }   // 徒歩・乗り継ぎで着く隣の駅/バス停
+    }
   }
   if (arr[b] === undefined || !pred[b]) return null;
   const legs = []; let c = pred[b];
   while (c) { const o = bd[c.tr[0]]; legs.unshift({ tr: c.tr, from: o.c.f, dep: o.c.d, to: c.t, arr: c.a }); c = o.prev; }
   return legs;
 }
+const dirName = d => DIR[d] || d;
+const legName = tr => D.lines[tr[1]][3] === 'bus' ? '🚌 ' + D.heads[tr[3]].split(' ')[0] : '🚃 ' + D.lines[tr[1]][1];
+const xferText = (p, g) => '<p class="s" style="margin:4px 0 4px 12px">↳ ' + (p.to === g.from ? `${nmS(g.from)}で乗換（${xf(g.from)}分以上）` :
+  `${nmS(p.to)} から ${nmS(g.from)} へ乗り継ぎ（約${(D.walk || []).find(w => (w[0] === p.to && w[1] === g.from) || (w[1] === p.to && w[0] === g.from))?.[2] ?? 5}分）`) + '</p>';
 const arrOf = L => L[L.length - 1].arr;
 function search() {
   const a = +$('#fr').value, b = +$('#to').value; AB = [a, b]; RES = [];
@@ -269,13 +281,13 @@ function showRes() {
   $('#rtb').textContent = 'リアルタイム経路検索 ' + (useDelay ? 'ON' : 'OFF');
   document.querySelectorAll('.tbn[data-o]').forEach(e => e.classList.toggle('on', e.dataset.o === ord));
   const R2 = RES.map((L, i) => [L, i]).sort((x, y) => (ord === 't' ? x[0].length - y[0].length : 0) || arrOf(x[0]) - arrOf(y[0]) || x[0][0].dep - y[0][0].dep);
-  $('#o3').innerHTML = R2.map(([L, i]) => `<div class="rc" data-ri="${i}"><div class="tt">${fmt(L[0].dep)} - ${fmt(arrOf(L))}</div><div class="mt">⏱ ${Math.round(arrOf(L) - L[0].dep)}分　⇄ 乗換 ${L.length - 1}回</div>${L.map(g => `<span class="lg" style="background:${LC[g.tr[1]]};color:#16322e">🚃 ${D.lines[g.tr[1]][1]}</span>`).join('')}</div>`).join('') || '<p class="s">この時刻以降に、大津線の中で行ける経路がありません。</p>';
+  $('#o3').innerHTML = R2.map(([L, i]) => `<div class="rc" data-ri="${i}"><div class="tt">${fmt(L[0].dep)} - ${fmt(arrOf(L))}</div><div class="mt">⏱ ${Math.round(arrOf(L) - L[0].dep)}分　⇄ 乗換 ${L.length - 1}回</div>${L.map(g => `<span class="lg" style="background:${LC[g.tr[1]]};color:#16322e">${legName(g.tr)}</span>`).join('')}</div>`).join('') || '<p class="s">この時刻以降に、大津線の中で行ける経路がありません。</p>';
 }
 function routeSheet(i) {
   const L = RES[i], nm = x => D.stations[x][1];
   let h = `<span id="x" style="float:right;padding:0 6px;font-size:22px;cursor:pointer">✕</span><b>${fmt(L[0].dep)} - ${fmt(arrOf(L))}</b> <span class="s">${Math.round(arrOf(L) - L[0].dep)}分 ／ 乗換 ${L.length - 1}回</span>`;
   L.forEach((g, k) => {
-    h += (k ? `<p class="s" style="margin:4px 0 4px 12px">↳ ${nm(g.from)}で乗換（${xf(g.from)}分以上）</p>` : '') +
+    h += (k ? xferText(L[k - 1], g) : '') +
       `<div class="rw" data-tr="${g.tr[0]}"><div class="tm"><b>${fmt(g.dep)}</b></div><div style="flex:1">${nm(g.from)} → ${nm(g.to)}<div class="s">${D.lines[g.tr[1]][1]}　${D.heads[g.tr[3]]}行　${fmt(g.arr)}着</div></div><span class="s">›</span></div>`;
   });
   $('#shb').innerHTML = h; $('#sh').classList.add('on');
