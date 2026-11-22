@@ -105,6 +105,7 @@ function loadMy() {
 }
 function saveMy() { try { localStorage.setItem('ll_my', JSON.stringify(MY)); } catch (e) {} }
 const nmS = i => D.stations[i][1];
+const nmL = i => D.stations[i][0].startsWith('bus:') ? D.stations[i][1] + '（バス停）' : D.stations[i][1];
 function board() {
   const t = now(), g = {}; let late = 0;
   for (const tr of TR) {
@@ -179,7 +180,7 @@ function sheet(id) {
   const tr = TR.find(x => x[0] === id), t = now(), p = locate(tr, t), S = tr[5], T = tr[6], n = S.length;
   const cur = p ? p.k : -1, done = !p && t >= T[n - 1], nm = k => D.stations[S[k]][1];
   const d0 = p ? dl(tr, p.k) : 0;
-  let h = `<span id="x" style="float:right;padding:0 6px;font-size:22px;cursor:pointer">✕</span><b>${D.lines[tr[1]][1]}　${D.heads[tr[3]]}行</b> <span class="s">#${tr[0]}　${dirName(D.dirs[tr[2])]}</span>`;
+  let h = `<span id="x" style="float:right;padding:0 6px;font-size:22px;cursor:pointer">✕</span><b>${D.lines[tr[1]][1]}　${D.heads[tr[3]]}行</b> <span class="s">#${tr[0]}　${dirName(D.dirs[tr[2]])}</span>`;
   h += `<div class="s">${p ? (p.w ? nm(0) + ' で発車待ち' : nm(p.k) + ' → ' + nm(p.k + 1) + ' を走行中') : (done ? '運行を終えました' : 'まだ出発していません')}${tr[4] >= 0 ? '<br>' + D.notes[tr[4]] : ''}${tr[8] >= 0 ? '<br>' + D.snotes[tr[8]] : ''}</div>`;
   h += `<p class="s">この列車の遅れ（この画面のみ）： <select id="dsel" data-id="${tr[0]}" data-k="${Math.max(cur, 0)}"><option value="0">遅れなし</option>${[1, 2, 3, 5, 10, 15, 20].map(x => `<option value="${x}"${d0 === x ? ' selected' : ''}>+${x}分</option>`).join('')}</select></p>`;
   S.forEach((si, k) => {
@@ -231,16 +232,20 @@ let RES = [], ord = 'a', AB = [0, 0], MR = [];
 function route(a, b, t0) {
   const wk = {};
   for (const [x, y, m] of D.walk || []) { (wk[x] ??= []).push([y, m]); (wk[y] ??= []).push([x, m]); }
-  // 折り返し乗車を出さない: 到着駅に1駅でも近づく区間だけを使う
+  // 折り返し乗車を出さない: 電車は、到着駅に1駅でも近づく区間だけを使う（バスは、系統が入り組むので制限しない）
   const adj = {}, hd = { [b]: 0 }, q = [b], link = (x, y) => { (adj[x] ??= []).push(y); (adj[y] ??= []).push(x); };
   for (const L of D.lines) if (!L[3]) for (let i = 0; i < L[2].length - 1; i++) link(L[2][i], L[2][i + 1]);
   for (const tr of TR) if (D.lines[tr[1]][3]) for (let k = 0; k < tr[5].length - 1; k++) link(tr[5][k], tr[5][k + 1]);
   for (const x in wk) for (const [y] of wk[x]) link(+x, y);
   for (let i = 0; i < q.length; i++) for (const n of adj[q[i]] || []) if (hd[n] === undefined) { hd[n] = hd[q[i]] + 1; q.push(n); }
   const C = [];
-  for (const tr of TR) { const S = tr[5], T = tr[6]; for (let k = 0; k < S.length - 1; k++) if (hd[S[k + 1]] < hd[S[k]]) C.push({ tr, f: S[k], t: S[k + 1], d: T[k] + dlb(tr, k), a: T[k + 1] + dlb(tr, k + 1) - (k + 1 < S.length - 1 && !D.lines[tr[1]][3] ? dw(S[k + 1]) : 0) }); }
+  for (const tr of TR) {
+    const S = tr[5], T = tr[6], bus = !!D.lines[tr[1]][3];
+    for (let k = 0; k < S.length - 1; k++) if (bus || hd[S[k + 1]] < hd[S[k]]) C.push({ tr, f: S[k], t: S[k + 1], d: T[k] + dlb(tr, k), a: T[k + 1] + dlb(tr, k + 1) - (k + 1 < S.length - 1 && !bus ? dw(S[k + 1]) : 0) });
+  }
   C.sort((x, y) => x.d - y.d);
-  const arr = { [a]: t0 }, pred = {}, on = {}, bd = {}, vw = {};
+  const arr = { [a]: t0 }, pred = {}, on = {}, bd = {}, vw = {}, wm = {};
+  for (const [y, m] of wk[a] || []) { arr[y] = t0 + m; vw[y] = true; wm[y] = m; }   // 出発地の隣のバス停/駅からも乗れる
   for (const c of C) {
     const id = c.tr[0];
     if (!on[id]) {
@@ -249,19 +254,23 @@ function route(a, b, t0) {
     }
     if (c.a < (arr[c.t] ?? 1e9)) {
       arr[c.t] = c.a; pred[c.t] = c; vw[c.t] = false;
-      for (const [y, m] of wk[c.t] || []) if (y !== b && c.a + m < (arr[y] ?? 1e9)) { arr[y] = c.a + m; pred[y] = c; vw[y] = true; }   // 徒歩・乗り継ぎで着く隣の駅/バス停
+      for (const [y, m] of wk[c.t] || []) if (y !== b && c.a + m < (arr[y] ?? 1e9)) { arr[y] = c.a + m; pred[y] = c; vw[y] = true; }   // 乗り継ぎで着く隣の駅/バス停
     }
   }
-  if (arr[b] === undefined || !pred[b]) return null;
-  const legs = []; let c = pred[b];
+  let end = vw[b] === false ? pred[b] : null, best = end ? arr[b] : 1e9, tail = 0;
+  for (const [y, m] of wk[b] || []) if (pred[y] && vw[y] === false && pred[y].a + m < best) { best = pred[y].a + m; end = pred[y]; tail = m; }   // 到着駅の隣から歩く
+  if (!end) return null;
+  const legs = []; let c = end;
   while (c) { const o = bd[c.tr[0]]; legs.unshift({ tr: c.tr, from: o.c.f, dep: o.c.d, to: c.t, arr: c.a }); c = o.prev; }
+  if (tail) legs.tail = tail;
+  if (legs[0].from !== a) legs.head = wm[legs[0].from] || 5;
   return legs;
 }
 const dirName = d => DIR[d] || d;
 const legName = tr => D.lines[tr[1]][3] === 'bus' ? '🚌 ' + D.heads[tr[3]].split(' ')[0] : '🚃 ' + D.lines[tr[1]][1];
 const xferText = (p, g) => '<p class="s" style="margin:4px 0 4px 12px">↳ ' + (p.to === g.from ? `${nmS(g.from)}で乗換（${xf(g.from)}分以上）` :
-  `${nmS(p.to)} から ${nmS(g.from)} へ乗り継ぎ（約${(D.walk || []).find(w => (w[0] === p.to && w[1] === g.from) || (w[1] === p.to && w[0] === g.from))?.[2] ?? 5}分）`) + '</p>';
-const arrOf = L => L[L.length - 1].arr;
+  `${nmL(p.to)} から ${nmL(g.from)} へ乗り継ぎ（約${(D.walk || []).find(w => (w[0] === p.to && w[1] === g.from) || (w[1] === p.to && w[0] === g.from))?.[2] ?? 5}分）`) + '</p>';
+const arrOf = L => L[L.length - 1].arr + (L.tail || 0), depOf = L => L[0].dep - (L.head || 0);
 function search() {
   const a = +$('#fr').value, b = +$('#to').value; AB = [a, b]; RES = [];
   if (a !== b) {
@@ -280,16 +289,18 @@ function showRes() {
   $('#rt2').textContent = `${n.getMonth() + 1}月${n.getDate()}日(${'日月火水木金土'[n.getDay()]}) ${fmt(now())} 出発`;
   $('#rtb').textContent = 'リアルタイム経路検索 ' + (useDelay ? 'ON' : 'OFF');
   document.querySelectorAll('.tbn[data-o]').forEach(e => e.classList.toggle('on', e.dataset.o === ord));
-  const R2 = RES.map((L, i) => [L, i]).sort((x, y) => (ord === 't' ? x[0].length - y[0].length : 0) || arrOf(x[0]) - arrOf(y[0]) || x[0][0].dep - y[0][0].dep);
-  $('#o3').innerHTML = R2.map(([L, i]) => `<div class="rc" data-ri="${i}"><div class="tt">${fmt(L[0].dep)} - ${fmt(arrOf(L))}</div><div class="mt">⏱ ${Math.round(arrOf(L) - L[0].dep)}分　⇄ 乗換 ${L.length - 1}回</div>${L.map(g => `<span class="lg" style="background:${LC[g.tr[1]]};color:#16322e">${legName(g.tr)}</span>`).join('')}</div>`).join('') || '<p class="s">この時刻以降に、大津線の中で行ける経路がありません。</p>';
+  const R2 = RES.map((L, i) => [L, i]).sort((x, y) => (ord === 't' ? x[0].length - y[0].length : 0) || arrOf(x[0]) - arrOf(y[0]) || x[0].length - y[0].length || y[0][0].dep - x[0][0].dep);
+  $('#o3').innerHTML = R2.map(([L, i]) => `<div class="rc" data-ri="${i}"><div class="tt">${fmt(depOf(L))} - ${fmt(arrOf(L))}</div><div class="mt">⏱ ${Math.round(arrOf(L) - depOf(L))}分　⇄ 乗換 ${L.length - 1}回</div>${L.map(g => `<span class="lg" style="background:${LC[g.tr[1]]};color:#16322e">${legName(g.tr)}</span>`).join('')}</div>`).join('') || '<p class="s">この時刻以降に、大津線の中で行ける経路がありません。</p>';
 }
 function routeSheet(i) {
   const L = RES[i], nm = x => D.stations[x][1];
-  let h = `<span id="x" style="float:right;padding:0 6px;font-size:22px;cursor:pointer">✕</span><b>${fmt(L[0].dep)} - ${fmt(arrOf(L))}</b> <span class="s">${Math.round(arrOf(L) - L[0].dep)}分 ／ 乗換 ${L.length - 1}回</span>`;
+  let h = `<span id="x" style="float:right;padding:0 6px;font-size:22px;cursor:pointer">✕</span><b>${fmt(depOf(L))} - ${fmt(arrOf(L))}</b> <span class="s">${Math.round(arrOf(L) - depOf(L))}分 ／ 乗換 ${L.length - 1}回</span>`;
+  if (L.head) h += `<p class="s" style="margin:6px 0">${nmL(AB[0])} から ${nmL(L[0].from)} へ（約${L.head}分）</p>`;
   L.forEach((g, k) => {
     h += (k ? xferText(L[k - 1], g) : '') +
       `<div class="rw" data-tr="${g.tr[0]}"><div class="tm"><b>${fmt(g.dep)}</b></div><div style="flex:1">${nm(g.from)} → ${nm(g.to)}<div class="s">${D.lines[g.tr[1]][1]}　${D.heads[g.tr[3]]}行　${fmt(g.arr)}着</div></div><span class="s">›</span></div>`;
   });
+  if (L.tail) h += `<p class="s" style="margin:6px 0">${nmL(L[L.length - 1].to)} から ${nmL(AB[1])} へ（約${L.tail}分）</p>`;
   $('#shb').innerHTML = h; $('#sh').classList.add('on');
 }
 function loadMR() { try { MR = JSON.parse(localStorage.getItem('ll_rt') || '[]'); } catch (e) { MR = []; } MR = MR.filter(r => D.stations[r[0]] && D.stations[r[1]]); }
