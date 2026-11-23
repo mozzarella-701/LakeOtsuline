@@ -26,6 +26,7 @@ main{padding-bottom:84px}
 .wide{width:100%;margin-top:8px;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg);font:inherit}
 .gr{display:flex;flex-wrap:wrap;gap:6px}.gr span{padding:5px 9px;border:1px solid var(--line);border-radius:6px;background:var(--card);font-variant-numeric:tabular-nums;cursor:pointer}
 #fr,#to{max-width:42%}
+.ic{width:14px;height:14px;vertical-align:-2px;margin-right:3px}
 .go{width:100%;margin-top:10px;padding:12px;border:0;border-radius:24px;background:#0b72b9;color:#fff;font:inherit;font-weight:700}
 .rh{display:flex;align-items:center;gap:8px;padding:6px 0}
 .tabs{display:flex;border-bottom:2px solid var(--line);margin:8px 0}
@@ -69,7 +70,7 @@ h2{font-size:14px;margin:16px 0 6px;color:var(--sub)}
 <button class="go" id="go">検索</button>
 <div class="my" style="margin-top:14px"><b>マイ区間</b><span class="lnk" id="svr">＋ この区間を保存</span></div><div id="myr"></div></div></div>
 <div id="r3" hidden><div class="rh"><span class="lnk" id="bk">‹ 戻る</span><div style="text-align:center;flex:1"><b id="rt1"></b><div class="s" id="rt2"></div></div><span style="width:44px"></span></div>
-<div class="tabs"><span class="tbn on" data-o="a">早い順</span><span class="tbn dis">安い順</span><span class="tbn" data-o="t">乗換順(少)</span></div>
+<div class="tabs"><span class="tbn on" data-o="a">早い順</span><span class="tbn" data-o="c">安い順</span><span class="tbn" data-o="t">乗換順(少)</span></div>
 <div class="rtb" id="rtb"></div><div id="o3"></div></div></div>
 </main>
 <nav class="tb"><button id="b1" class="on">ホーム</button><button id="b3">乗換案内</button><button id="b2">列車走行位置</button><button id="b4">会員・問合せ</button></nav>
@@ -267,9 +268,34 @@ function route(a, b, t0) {
   return legs;
 }
 const dirName = d => DIR[d] || d;
-const legName = tr => D.lines[tr[1]][3] === 'bus' ? '🚌 ' + D.heads[tr[3]].split(' ')[0] : '🚃 ' + D.lines[tr[1]][1];
-const xferText = (p, g) => '<p class="s" style="margin:4px 0 4px 12px">↳ ' + (p.to === g.from ? `${nmS(g.from)}で乗換（${xf(g.from)}分以上）` :
-  `${nmL(p.to)} から ${nmL(g.from)} へ乗り継ぎ（約${(D.walk || []).find(w => (w[0] === p.to && w[1] === g.from) || (w[1] === p.to && w[0] === g.from))?.[2] ?? 5}分）`) + '</p>';
+// 乗換案内の印（オリジナルの簡単な絵）
+const IC = {
+  walk: '<svg class="ic" viewBox="0 0 16 16"><circle cx="9.5" cy="2.6" r="1.7" fill="currentColor"/><path d="M9 5.3 7 8.2l2 1.8-.9 4.3M7 8.2 4.8 9.3M9.3 7.6 11.8 8.8M9 10l2 4.3" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  train: '<svg class="ic" viewBox="0 0 16 16"><rect x="3" y="2" width="10" height="9" rx="2" fill="currentColor"/><rect x="5" y="4" width="6" height="3" rx=".8" fill="#fff"/><path d="M5 14l1.2-3M11 14l-1.2-3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg>',
+  bus: '<svg class="ic" viewBox="0 0 16 16"><rect x="2.5" y="2.5" width="11" height="9.5" rx="1.8" fill="currentColor"/><rect x="4" y="4" width="8" height="3.2" rx=".8" fill="#fff"/><circle cx="5.2" cy="13.3" r="1.2" fill="currentColor"/><circle cx="10.8" cy="13.3" r="1.2" fill="currentColor"/></svg>',
+  swap: '<svg class="ic" viewBox="0 0 16 16"><path d="M3 5h9M9.5 2.5 12 5l-2.5 2.5M13 11H4M6.5 8.5 4 11l2.5 2.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+};
+const legName = tr => D.lines[tr[1]][3] === 'bus' ? IC.bus + D.heads[tr[3]].split(' ')[0] : IC.train + D.lines[tr[1]][1];
+const walkMin = (a, b) => (D.walk || []).find(w => (w[0] === a && w[1] === b) || (w[1] === a && w[0] === b))?.[2] ?? 5;
+// 運賃（営業キロを1km単位に切り上げて、1〜5km:200円 / 6〜10km:280円 / 11〜15km:380円。電車だけ。続けて乗る電車は距離を通算）
+const FARE = [[5, 200], [10, 280], [15, 380]];
+function fareOf(L) {
+  let rail = 0, bus = false, seg = 0;
+  const flush = () => { if (seg > 0) { const k = Math.ceil(Math.round(seg * 10) / 10); rail += (FARE.find(f => k <= f[0]) || FARE[FARE.length - 1])[1]; } seg = 0; };
+  L.forEach((g, i) => {
+    const ln = D.lines[g.tr[1]], km = (D.km || [])[g.tr[1]];
+    if (ln[3] === 'bus') { bus = true; flush(); return; }
+    if (km) seg += Math.abs(km[ln[2].indexOf(g.from)] - km[ln[2].indexOf(g.to)]);
+    const nx = L[i + 1]; if (!nx || D.lines[nx.tr[1]][3] || nx.from !== g.to) flush();
+  });
+  return { rail, txt: rail ? `¥${rail}円${bus ? '＋バス' : ''}` : (bus ? 'バス運賃は含みません' : ''), note: bus && rail ? '（電車の分のみ。バス運賃は含みません）' : '' };
+}
+const pills = L => {
+  const w = m => `<span class="lg" style="background:#e3e6ea;color:#333">${IC.walk}徒歩${m}分</span>`; let h = '';
+  if (L.head) h += w(L.head);
+  L.forEach((g, i) => { if (i && L[i - 1].to !== g.from) h += w(walkMin(L[i - 1].to, g.from)); h += `<span class="lg" style="background:${LC[g.tr[1]]};color:#16322e">${legName(g.tr)}</span>`; });
+  return h + (L.tail ? w(L.tail) : '');
+};
 const arrOf = L => L[L.length - 1].arr + (L.tail || 0), depOf = L => L[0].dep - (L.head || 0);
 function search() {
   const a = +$('#fr').value, b = +$('#to').value; AB = [a, b]; RES = [];
@@ -289,18 +315,19 @@ function showRes() {
   $('#rt2').textContent = `${n.getMonth() + 1}月${n.getDate()}日(${'日月火水木金土'[n.getDay()]}) ${fmt(now())} 出発`;
   $('#rtb').textContent = 'リアルタイム経路検索 ' + (useDelay ? 'ON' : 'OFF');
   document.querySelectorAll('.tbn[data-o]').forEach(e => e.classList.toggle('on', e.dataset.o === ord));
-  const R2 = RES.map((L, i) => [L, i]).sort((x, y) => (ord === 't' ? x[0].length - y[0].length : 0) || arrOf(x[0]) - arrOf(y[0]) || x[0].length - y[0].length || y[0][0].dep - x[0][0].dep);
-  $('#o3').innerHTML = R2.map(([L, i]) => `<div class="rc" data-ri="${i}"><div class="tt">${fmt(depOf(L))} - ${fmt(arrOf(L))}</div><div class="mt">⏱ ${Math.round(arrOf(L) - depOf(L))}分　⇄ 乗換 ${L.length - 1}回</div>${L.map(g => `<span class="lg" style="background:${LC[g.tr[1]]};color:#16322e">${legName(g.tr)}</span>`).join('')}</div>`).join('') || '<p class="s">この時刻以降に、大津線の中で行ける経路がありません。</p>';
+  const R2 = RES.map((L, i) => [L, i]).sort((x, y) => (ord === 'c' ? fareOf(x[0]).rail - fareOf(y[0]).rail : 0) || (ord === 't' ? x[0].length - y[0].length : 0) || arrOf(x[0]) - arrOf(y[0]) || x[0].length - y[0].length || y[0][0].dep - x[0][0].dep);
+  $('#o3').innerHTML = R2.map(([L, i]) => `<div class="rc" data-ri="${i}"><div class="tt">${fmt(depOf(L))} - ${fmt(arrOf(L))}</div><div class="mt">${fareOf(L).txt}　⏱ ${Math.round(arrOf(L) - depOf(L))}分　⇄ 乗換 ${L.length - 1}回</div>${pills(L)}</div>`).join('') || '<p class="s">この時刻以降に、大津線の中で行ける経路がありません。</p>';
 }
 function routeSheet(i) {
-  const L = RES[i], nm = x => D.stations[x][1];
-  let h = `<span id="x" style="float:right;padding:0 6px;font-size:22px;cursor:pointer">✕</span><b>${fmt(depOf(L))} - ${fmt(arrOf(L))}</b> <span class="s">${Math.round(arrOf(L) - depOf(L))}分 ／ 乗換 ${L.length - 1}回</span>`;
-  if (L.head) h += `<p class="s" style="margin:6px 0">${nmL(AB[0])} から ${nmL(L[0].from)} へ（約${L.head}分）</p>`;
+  const L = RES[i], f = fareOf(L);
+  let h = `<span id="x" style="float:right;padding:0 6px;font-size:22px;cursor:pointer">✕</span><b>${fmt(depOf(L))} - ${fmt(arrOf(L))}</b> <span class="s">${Math.round(arrOf(L) - depOf(L))}分 ／ 乗換 ${L.length - 1}回</span>${f.txt ? `<div class="s">運賃 ${f.txt}${f.note}</div>` : ''}`;
+  const walkRow = (a, b, m) => `<p class="s" style="margin:6px 0">${IC.walk} ${nmL(a)} から ${nmL(b)} へ徒歩（約${m}分）</p>`;
+  if (L.head) h += walkRow(AB[0], L[0].from, L.head);
   L.forEach((g, k) => {
-    h += (k ? xferText(L[k - 1], g) : '') +
-      `<div class="rw" data-tr="${g.tr[0]}"><div class="tm"><b>${fmt(g.dep)}</b></div><div style="flex:1">${nm(g.from)} → ${nm(g.to)}<div class="s">${D.lines[g.tr[1]][1]}　${D.heads[g.tr[3]]}行　${fmt(g.arr)}着</div></div><span class="s">›</span></div>`;
+    if (k) h += L[k - 1].to === g.from ? `<p class="s" style="margin:4px 0 4px 12px">${IC.swap} ${nmL(g.from)}で乗換（${xf(g.from)}分以上）</p>` : walkRow(L[k - 1].to, g.from, walkMin(L[k - 1].to, g.from));
+    h += `<div class="rw" data-tr="${g.tr[0]}"><div class="tm"><b>${fmt(g.dep)}</b></div><div style="flex:1">${nmL(g.from)} → ${nmL(g.to)}<div class="s">${D.lines[g.tr[1]][3] === 'bus' ? IC.bus : legName(g.tr) + '　'}${D.heads[g.tr[3]]}行　${fmt(g.arr)}着</div></div><span class="s">›</span></div>`;
   });
-  if (L.tail) h += `<p class="s" style="margin:6px 0">${nmL(L[L.length - 1].to)} から ${nmL(AB[1])} へ（約${L.tail}分）</p>`;
+  if (L.tail) h += walkRow(L[L.length - 1].to, AB[1], L.tail);
   $('#shb').innerHTML = h; $('#sh').classList.add('on');
 }
 function loadMR() { try { MR = JSON.parse(localStorage.getItem('ll_rt') || '[]'); } catch (e) { MR = []; } MR = MR.filter(r => D.stations[r[0]] && D.stations[r[1]]); }
