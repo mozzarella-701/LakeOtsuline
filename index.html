@@ -339,7 +339,7 @@ function showRes() {
   $('#rt2').textContent = `${n.getMonth() + 1}月${n.getDate()}日(${'日月火水木金土'[n.getDay()]}) ${fmt(now())} 出発`;
   $('#rtb').textContent = 'リアルタイム経路検索 ' + (useDelay ? 'ON' : 'OFF');
   document.querySelectorAll('.tbn[data-o]').forEach(e => e.classList.toggle('on', e.dataset.o === ord));
-  const R2 = RES.map((L, i) => [L, i]).sort((x, y) => (ord === 'c' ? fareOf(x[0]).rail - fareOf(y[0]).rail : 0) || (ord === 't' ? x[0].length - y[0].length : 0) || arrOf(x[0]) - arrOf(y[0]) || x[0].length - y[0].length || y[0][0].dep - x[0][0].dep);
+  const R2 = RES.map((L, i) => [L, i]).sort((x, y) => (ord === 'c' ? fareOf(x[0]).tot - fareOf(y[0]).tot : 0) || (ord === 't' ? x[0].length - y[0].length : 0) || arrOf(x[0]) - arrOf(y[0]) || x[0].length - y[0].length || y[0][0].dep - x[0][0].dep);
   $('#o3').innerHTML = R2.map(([L, i]) => `<div class="rc" data-ri="${i}"><div class="tt">${fmt(depOf(L))} - ${fmt(arrOf(L))}</div><div class="mt">${fareOf(L).txt}　⏱ ${Math.round(arrOf(L) - depOf(L))}分　⇄ 乗換 ${L.length - 1}回</div>${pills(L)}</div>`).join('') || '<p class="s">この時刻以降に、大津線の中で行ける経路がありません。</p>';
 }
 function routeSheet(i) {
