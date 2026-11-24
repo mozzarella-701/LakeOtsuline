@@ -304,16 +304,6 @@ function fareOf(L) {
   const tot = rail + bus;
   return { rail, bus, tot, unk, txt: tot ? `¥${tot}円${unk ? '＋不明区間あり' : ''}` : (unk ? 'バス運賃は表にありません' : ''), note: unk ? '（運賃表にないバス区間は含みません）' : '' };
 }
-  let rail = 0, bus = false, seg = 0;
-  const flush = () => { if (seg > 0) { const k = Math.ceil(Math.round(seg * 10) / 10); rail += (FARE.find(f => k <= f[0]) || FARE[FARE.length - 1])[1]; } seg = 0; };
-  L.forEach((g, i) => {
-    const ln = D.lines[g.tr[1]], km = (D.km || [])[g.tr[1]];
-    if (ln[3] === 'bus') { bus = true; flush(); return; }
-    if (km) seg += Math.abs(km[ln[2].indexOf(g.from)] - km[ln[2].indexOf(g.to)]);
-    const nx = L[i + 1]; if (!nx || D.lines[nx.tr[1]][3] || nx.from !== g.to) flush();
-  });
-  return { rail, txt: rail ? `¥${rail}円${bus ? '＋バス' : ''}` : (bus ? 'バス運賃は含みません' : ''), note: bus && rail ? '（電車の分のみ。バス運賃は含みません）' : '' };
-}
 const pills = L => {
   const w = m => `<span class="lg" style="background:#e3e6ea;color:#333">${IC.walk}徒歩${m}分</span>`; let h = '';
   if (L.head) h += w(L.head);
