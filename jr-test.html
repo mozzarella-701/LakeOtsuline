@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>JR 列車走行位置 接続テスト</title>
+<style>
+body{font:14px/1.6 system-ui,"Hiragino Sans",sans-serif;margin:0;padding:14px;max-width:760px;margin:auto}
+button{padding:10px 18px;font:inherit;border:0;border-radius:20px;background:#0b72b9;color:#fff;font-weight:700}
+input{font:inherit;padding:6px;width:100%;box-sizing:border-box}
+pre{background:#f3f5f8;padding:8px;border-radius:6px;white-space:pre-wrap;word-break:break-all;font-size:12px;max-height:240px;overflow:auto}
+.ok{color:#1a7f37;font-weight:700}.ng{color:#c2410c;font-weight:700}
+</style></head><body>
+<h2>JR 列車走行位置 接続テスト</h2>
+<p>このページを開いた端末のブラウザから、JR西日本の列車走行位置の通信先に、<b>ボタンを押したときに1回だけ</b>、問い合わせます（自動では繰り返しません）。結果の画面を、スクリーンショットで送ってください。</p>
+<label>通信先の入り口（変更が必要なときだけ）<input id="host" value="https://www.train-guide.westjr.co.jp"></label>
+<p><button id="go">テストする</button></p>
+<div id="out"></div>
+<script>
+const LINES = ['hokurikubiwako', 'kosei'];   // 琵琶湖線(北陸線)、湖西線
+const out = document.getElementById('out');
+const add = h => out.insertAdjacentHTML('beforeend', h);
+const esc = x => String(x).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+async function probe(label, path) {
+  const url = document.getElementById('host').value.replace(/\/$/, '') + path;
+  add(`<h3>${esc(label)}</h3><div class="s">${esc(url)}</div>`);
+  try {
+    const r = await fetch(url, { cache: 'no-store' });
+    const t = await r.text();
+    add(`<div class="${r.ok ? 'ok' : 'ng'}">応答 ${r.status}（${t.length}文字）</div>`);
+    let j = null; try { j = JSON.parse(t); } catch (e) { add('<div class="ng">JSONではありません</div>'); }
+    if (j) {
+      add(`<div>最上位の項目: ${esc(Object.keys(j).join(', '))}</div>`);
+      const arr = j.trains || j.stations || null;
+      if (arr) add(`<div>${j.trains ? '列車' : '駅'}の数: ${arr.length}</div><pre>${esc(JSON.stringify(arr.slice(0, 2), null, 1))}</pre>`);
+      else add(`<pre>${esc(t.slice(0, 600))}</pre>`);
+      if (j.update) add(`<div>更新時刻: ${esc(j.update)}</div>`);
+    }
+  } catch (e) {
+    add(`<div class="ng">失敗: ${esc(e.message || e)}</div><div class="s">ブラウザの制限（別のサイトへの通信を許可していない）や、通信先の変更が考えられます。</div>`);
+  }
+}
+document.getElementById('go').onclick = async () => {
+  out.innerHTML = '';
+  for (const l of LINES) { await probe(l + '（列車の位置）', `/api/v3/${l}.json`); await probe(l + '（駅の一覧）', `/api/v3/${l}_st.json`); }
+  add('<p>おわりです。この画面を、スクリーンショットで送ってください。</p>');
+};
+</script></body></html>
