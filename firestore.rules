@@ -9,6 +9,20 @@ service cloud.firestore {
         && request.resource.data.name is string && request.resource.data.name.size() <= 50
         && request.resource.data.email == request.auth.token.email;
     }
+    // 遅れの共有: 誰でも読める。書けるのは会員だけで、自分の分（日付_列車番号_自分のID）だけ。更新は30秒に1回まで
+    match /delays/{id} {
+      allow read: if true;
+      allow create, update: if request.auth != null
+        && id == request.resource.data.date + '_' + string(request.resource.data.trip) + '_' + request.auth.uid
+        && request.resource.data.keys().hasOnly(['trip', 'date', 'k', 'min', 'uid', 'at'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.trip is int && request.resource.data.k is int && request.resource.data.k >= 0 && request.resource.data.k < 80
+        && request.resource.data.min is int && request.resource.data.min >= 1 && request.resource.data.min <= 120
+        && request.resource.data.date is string && request.resource.data.date.size() == 10
+        && request.resource.data.at == request.time
+        && (resource == null || request.time > resource.data.at + duration.value(30, 's'));
+      allow delete: if request.auth != null && id.matches('.*_' + request.auth.uid);
+    }
     // お問い合わせ: 会員だけが、自分の名義で送れる。読むのは管理者（Firebaseコンソール）だけ
     match /inquiries/{id} {
       allow create: if request.auth != null

@@ -26,6 +26,7 @@ main{padding-bottom:84px}
 .wide{width:100%;margin-top:8px;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg);font:inherit}
 .gr{display:flex;flex-wrap:wrap;gap:6px}.gr span{padding:5px 9px;border:1px solid var(--line);border-radius:6px;background:var(--card);font-variant-numeric:tabular-nums;cursor:pointer}
 #fr,#to{max-width:42%}
+.lk{display:block;text-align:center;margin-top:8px;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--acc);text-decoration:none}
 .ic{width:14px;height:14px;vertical-align:-2px;margin-right:3px}
 .go{width:100%;margin-top:10px;padding:12px;border:0;border-radius:24px;background:#0b72b9;color:#fff;font:inherit;font-weight:700}
 .rh{display:flex;align-items:center;gap:8px;padding:6px 0}
@@ -60,6 +61,10 @@ h2{font-size:14px;margin:16px 0 6px;color:var(--sub)}
 <div class="my"><span><b>マイ駅</b> <span class="s" id="clk"></span></span><span class="lnk" id="addb">他の駅を探す ›</span></div>
 <div id="addp" hidden><select id="st" aria-label="駅"></select></div>
 <div id="chips"></div><div id="o1"></div>
+<div class="card" style="margin-top:12px"><div class="ch"><b>JR（公式ページ）</b></div>
+<a class="lk" href="https://www.train-guide.westjr.co.jp/hokurikubiwako.html" target="_blank" rel="noopener noreferrer">琵琶湖線　列車走行位置</a>
+<a class="lk" href="https://www.train-guide.westjr.co.jp/kosei.html?st=0919" target="_blank" rel="noopener noreferrer">湖西線　列車走行位置</a>
+<a class="lk" href="https://trafficinfo.westjr.co.jp/kinki.html" target="_blank" rel="noopener noreferrer">運行情報（近畿）</a></div>
 </div>
 <div id="p2" hidden><div id="o2"></div></div>
 <div id="p4" hidden><h2>会員・お問い合わせ</h2><div id="o4"></div></div>
@@ -88,7 +93,7 @@ function now() {
   let t = h * 60 + m + s / 60; if (h < 4) t += 1440; return t;
 }
 // 投稿された遅れ(分)は、その停車駅以降すべてに引き継ぐ
-const dl = (tr, k) => { const r = R[tr[0]]; return r && k >= r.k ? r.min : 0; };
+const dl = (tr, k) => { const r = R[tr[0]] || SH[tr[0]]; return r && k >= r.k ? r.min : 0; };
 function locate(tr, t) {
   const T = tr[6], n = T.length;
   if (t < T[0] || t >= T[n - 1] + dl(tr, n - 1)) return null;
@@ -183,7 +188,7 @@ function sheet(id) {
   const d0 = p ? dl(tr, p.k) : 0;
   let h = `<span id="x" style="float:right;padding:0 6px;font-size:22px;cursor:pointer">✕</span><b>${D.lines[tr[1]][1]}　${D.heads[tr[3]]}行</b> <span class="s">#${tr[0]}　${dirName(D.dirs[tr[2]])}</span>`;
   h += `<div class="s">${p ? (p.w ? nm(0) + ' で発車待ち' : nm(p.k) + ' → ' + nm(p.k + 1) + ' を走行中') : (done ? '運行を終えました' : 'まだ出発していません')}${tr[4] >= 0 ? '<br>' + D.notes[tr[4]] : ''}${tr[8] >= 0 ? '<br>' + D.snotes[tr[8]] : ''}</div>`;
-  h += `<p class="s">この列車の遅れ（この画面のみ）： <select id="dsel" data-id="${tr[0]}" data-k="${Math.max(cur, 0)}"><option value="0">遅れなし</option>${[1, 2, 3, 5, 10, 15, 20].map(x => `<option value="${x}"${d0 === x ? ' selected' : ''}>+${x}分</option>`).join('')}</select></p>`;
+  h += `<p class="s">この列車の遅れ（${window.fb && window.fb.ready && window.fb.user() ? '入力すると、全員に共有されます' : 'この画面のみ。ログインすると、全員に共有されます'}）： <select id="dsel" data-id="${tr[0]}" data-k="${Math.max(cur, 0)}"><option value="0">遅れなし</option>${[1, 2, 3, 5, 10, 15, 20].map(x => `<option value="${x}"${d0 === x ? ' selected' : ''}>+${x}分</option>`).join('')}</select></p>${SH[tr[0]] ? `<p class="s late">みんなの報告: 遅れ+${SH[tr[0]].min}分（${SH[tr[0]].n}件）</p>` : ''}`;
   S.forEach((si, k) => {
     const d = dl(tr, k), e = T[k] + d;
     h += `<div class="st${done || k < cur ? ' past' : ''}${k === cur ? ' now' : ''}"><span>${nm(k)}${k === n - 1 ? '（終点・到着は推定）' : ''}</span><span>${fmt(e)}${d ? ` <span class="late">+${d}</span>` : ''}</span></div>`;
@@ -221,7 +226,7 @@ function autoDay() {
 function setDay() {
   const v = $('#dy').value, k = v || autoDay(), di = Math.max(0, D.days.findIndex(x => x[0] === k));
   TR = D.trips.filter(t => t[7] === di);
-  $('#dayinfo').innerHTML = `いまは<b>${D.days[di][1]}ダイヤ</b>で表示しています${v ? '（手動で選択）' : '（日付から自動で判定。祝日・年末年始は土休日扱い）'}。遅れの入力は、この画面の中だけで反映され、他の人には共有されません。`;
+  $('#dayinfo').innerHTML = `いまは<b>${D.days[di][1]}ダイヤ</b>で表示しています${v ? '（手動で選択）' : '（日付から自動で判定。祝日・年末年始は土休日扱い）'}。遅れの入力は、ログインしていると全員に共有され、していないときは、この画面だけに反映されます。`;
 }
 // 乗換案内: 全列車の「駅→次の駅」を時刻順に走査して、最も早く着く経路を求める
 const XFER = { default: 1, 'biwako-hamaotsu': 1 };   // 乗換に必要な分。浜大津は1分（指定）。他の駅は調査後に更新する
@@ -277,32 +282,18 @@ const IC = {
 };
 const legName = tr => D.lines[tr[1]][3] === 'bus' ? IC.bus + D.heads[tr[3]].split(' ')[0] : IC.train + D.lines[tr[1]][1];
 const walkMin = (a, b) => (D.walk || []).find(w => (w[0] === a && w[1] === b) || (w[1] === a && w[0] === b))?.[2] ?? 5;
-// バス運賃: D.fare（江若バスの運賃表）から、系統名と乗降の停留所で引く。表にない区間は null
-function busFare(g) {
-  const h = D.heads[g.tr[3]];
-  if (h.includes('無料')) return 0;                 // 競艇場の無料シャトル
-  const sys = h.split('系統')[0];                    // 「52系統 石山駅」→ "52"
-  for (const [labels, st, f] of D.fare || []) {
-    if (!labels.includes(sys)) continue;
-    const i = st.indexOf(g.from), j = st.indexOf(g.to);
-    if (i < 0 || j < 0) continue;
-    return i === j ? 0 : (i > j ? f[i][j] : f[j][i]);  // 表で「-」の組は null
-  }
-  return null;
-}
-// 運賃（電車: 営業キロを1km単位に切り上げて 1〜5km:200円 / 6〜10km:280円 / 11〜15km:380円。続けて乗る電車は距離を通算。バス: 運賃表の区間運賃を乗車ごとに足す）
+// 運賃（営業キロを1km単位に切り上げて、1〜5km:200円 / 6〜10km:280円 / 11〜15km:380円。電車だけ。続けて乗る電車は距離を通算）
 const FARE = [[5, 200], [10, 280], [15, 380]];
 function fareOf(L) {
-  let rail = 0, bus = 0, unk = false, seg = 0;
+  let rail = 0, bus = false, seg = 0;
   const flush = () => { if (seg > 0) { const k = Math.ceil(Math.round(seg * 10) / 10); rail += (FARE.find(f => k <= f[0]) || FARE[FARE.length - 1])[1]; } seg = 0; };
   L.forEach((g, i) => {
     const ln = D.lines[g.tr[1]], km = (D.km || [])[g.tr[1]];
-    if (ln[3] === 'bus') { flush(); const v = busFare(g); if (v == null) unk = true; else bus += v; return; }
+    if (ln[3] === 'bus') { bus = true; flush(); return; }
     if (km) seg += Math.abs(km[ln[2].indexOf(g.from)] - km[ln[2].indexOf(g.to)]);
     const nx = L[i + 1]; if (!nx || D.lines[nx.tr[1]][3] || nx.from !== g.to) flush();
   });
-  const tot = rail + bus;
-  return { rail, bus, tot, unk, txt: tot ? `¥${tot}円${unk ? '＋不明区間あり' : ''}` : (unk ? 'バス運賃は表にありません' : ''), note: unk ? '（運賃表にないバス区間は含みません）' : '' };
+  return { rail, txt: rail ? `¥${rail}円${bus ? '＋バス' : ''}` : (bus ? 'バス運賃は含みません' : ''), note: bus && rail ? '（電車の分のみ。バス運賃は含みません）' : '' };
 }
 const pills = L => {
   const w = m => `<span class="lg" style="background:#e3e6ea;color:#333">${IC.walk}徒歩${m}分</span>`; let h = '';
@@ -329,7 +320,7 @@ function showRes() {
   $('#rt2').textContent = `${n.getMonth() + 1}月${n.getDate()}日(${'日月火水木金土'[n.getDay()]}) ${fmt(now())} 出発`;
   $('#rtb').textContent = 'リアルタイム経路検索 ' + (useDelay ? 'ON' : 'OFF');
   document.querySelectorAll('.tbn[data-o]').forEach(e => e.classList.toggle('on', e.dataset.o === ord));
-  const R2 = RES.map((L, i) => [L, i]).sort((x, y) => (ord === 'c' ? fareOf(x[0]).tot - fareOf(y[0]).tot : 0) || (ord === 't' ? x[0].length - y[0].length : 0) || arrOf(x[0]) - arrOf(y[0]) || x[0].length - y[0].length || y[0][0].dep - x[0][0].dep);
+  const R2 = RES.map((L, i) => [L, i]).sort((x, y) => (ord === 'c' ? fareOf(x[0]).rail - fareOf(y[0]).rail : 0) || (ord === 't' ? x[0].length - y[0].length : 0) || arrOf(x[0]) - arrOf(y[0]) || x[0].length - y[0].length || y[0][0].dep - x[0][0].dep);
   $('#o3').innerHTML = R2.map(([L, i]) => `<div class="rc" data-ri="${i}"><div class="tt">${fmt(depOf(L))} - ${fmt(arrOf(L))}</div><div class="mt">${fareOf(L).txt}　⏱ ${Math.round(arrOf(L) - depOf(L))}分　⇄ 乗換 ${L.length - 1}回</div>${pills(L)}</div>`).join('') || '<p class="s">この時刻以降に、大津線の中で行ける経路がありません。</p>';
 }
 function routeSheet(i) {
@@ -349,6 +340,17 @@ function saveMR() { try { localStorage.setItem('ll_rt', JSON.stringify(MR)); } c
 function drawMR() {
   $('#myr').innerHTML = MR.map((r, i) => `<div class="rw" data-mr="${i}"><div style="flex:1">${D.stations[r[0]][1]} - ${D.stations[r[1]][1]}</div><span class="s" data-rm3="${i}" style="padding:0 8px">×</span></div>`).join('') || '<p class="s">まだありません。</p>';
 }
+// ---- 遅れの共有（Firestore）: 直近45分の報告の中央値を、その列車の遅れとして使う ----
+let SH = {}, watching = false;
+const sdate = () => { const n = new Date(); if (n.getHours() < 4) n.setDate(n.getDate() - 1); return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`; };
+function onShared(arr) {
+  const t0 = Date.now(), g = {}; SH = {};
+  for (const r of arr) { const t = r.at && r.at.toMillis ? r.at.toMillis() : t0; if (t0 - t < 45 * 60000) (g[r.trip] ??= []).push({ ...r, t }); }
+  for (const id in g) { const a = g[id].sort((x, y) => x.t - y.t), m = a.map(x => x.min).sort((x, y) => x - y); SH[id] = { k: a[a.length - 1].k, min: m[Math.floor(m.length / 2)], n: a.length }; }
+  render();
+}
+function startWatch() { const f = window.fb; if (watching || !f || !f.ready || !D) return; watching = true; f.watch(sdate(), onShared); }
+window.addEventListener('fbready', startWatch);
 // ---- 会員・お問い合わせ（Firebase Authentication + Firestore）----
 const esc = x => String(x).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ERR = { 'auth/invalid-email': 'メールアドレスの形式が正しくありません。', 'auth/email-already-in-use': 'このメールアドレスは、すでに登録されています。', 'auth/weak-password': 'パスワードは6文字以上にしてください。',
@@ -413,7 +415,7 @@ fetch('timetable.json').then(r => r.json()).then(j => {
     for (const i of L[2]) if (!seen.has(i)) { seen.add(i); h += `<option value="${i}">${D.stations[i][1]}</option>`; }
     h += '</optgroup>';
   }
-  $('#st').innerHTML = '<option value="" selected disabled>駅を選ぶ…</option>' + h; $('#fr').innerHTML = h; $('#to').innerHTML = h; $('#to').selectedIndex = $('#to').options.length - 1; loadMy(); loadMR(); drawMR(); render(); setInterval(render, 15000);
+  $('#st').innerHTML = '<option value="" selected disabled>駅を選ぶ…</option>' + h; $('#fr').innerHTML = h; $('#to').innerHTML = h; $('#to').selectedIndex = $('#to').options.length - 1; loadMy(); loadMR(); drawMR(); render(); startWatch(); setInterval(render, 15000);
 }).catch(() => { $('#o1').textContent = 'timetable.json を読み込めません。サーバー経由（GitHub Pages など）で開いてください。'; });
 $('#tm').oninput = $('#dy').onchange = render; $('#rf').onclick = render;
 $('#b1').onclick = () => show(1); $('#b2').onclick = () => show(2); $('#b3').onclick = () => show(3); $('#b4').onclick = () => { show(4); drawAcct(); };
@@ -451,13 +453,14 @@ $('#sh').onclick = e => { if (e.target.id === 'sh' || e.target.id === 'x') $('#s
 $('#shb').onchange = e => {
   const x = e.target; if (!x.dataset.id) return;
   const m = +x.value; if (m) R[x.dataset.id] = { k: +x.dataset.k, min: m }; else delete R[x.dataset.id];
+  const f = window.fb; if (f && f.ready && f.user()) { const rec = { trip: +x.dataset.id, date: sdate(), k: +x.dataset.k, min: m }; (m ? f.post(rec) : f.clear(rec)).catch(() => {}); }
   render(); sheet(+x.dataset.id);
 };
 </script>
 <script type="module">
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
 import { getAuth, onAuthStateChanged, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, sendPasswordResetEmail, updateProfile } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
-import { getFirestore, doc, setDoc, addDoc, collection, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
+import { getFirestore, doc, setDoc, addDoc, deleteDoc, collection, query, where, onSnapshot, serverTimestamp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
 const cfg = window.FB_CONFIG, fb = window.fb = { ready: false };
 if (cfg && cfg.apiKey && !String(cfg.apiKey).startsWith('ここに')) {
   const auth = getAuth(initializeApp(cfg)), db = getFirestore(auth.app);
@@ -467,6 +470,9 @@ if (cfg && cfg.apiKey && !String(cfg.apiKey).startsWith('ここに')) {
     out: () => signOut(auth), reset: e => sendPasswordResetEmail(auth, e),
     setName: async n => { await updateProfile(auth.currentUser, { displayName: n }); await setDoc(doc(db, 'users', auth.currentUser.uid), { name: n, email: auth.currentUser.email, updatedAt: serverTimestamp() }, { merge: true }); },
     send: m => addDoc(collection(db, 'inquiries'), { name: m.name, email: m.email, kind: m.kind, message: m.message, uid: auth.currentUser.uid, createdAt: serverTimestamp() }),
+    watch: (date, cb) => onSnapshot(query(collection(db, 'delays'), where('date', '==', date)), snap => cb(snap.docs.map(d => d.data()))),
+    post: m => setDoc(doc(db, 'delays', `${m.date}_${m.trip}_${auth.currentUser.uid}`), { trip: m.trip, date: m.date, k: m.k, min: m.min, uid: auth.currentUser.uid, at: serverTimestamp() }),
+    clear: m => deleteDoc(doc(db, 'delays', `${m.date}_${m.trip}_${auth.currentUser.uid}`)),
   });
   onAuthStateChanged(auth, () => window.dispatchEvent(new Event('fbauth')));
 }
